@@ -1,0 +1,606 @@
+-- ✅ โหลด WindUI
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "HOON Hub",
+    Icon = "door-open",
+    Author = "by As4r",
+    Folder = "HOON Hub",
+    Theme = "Dark",
+})
+
+Window:EditOpenButton({
+    Title = "HOON Hub | test",
+    Icon = "monitor",
+    Color = ColorSequence.new(
+        Color3.fromHex("FF0F7B"),
+        Color3.fromHex("F89B29")
+    ),
+})
+
+
+--------------------------------------------------------
+-- 🟢 Aimbot Tab
+--------------------------------------------------------
+local Tab_Aimbot = Window:Tab({Title = "Aimbot", Icon = "crosshair"})
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- Settings
+local SilentAim_Enabled = false
+local SilentAim_FOV = 120
+local SilentAim_Smooth = 0.35
+local SilentAim_TargetPart = "Head"
+local FOV_CenterMouse = true
+
+-- Drawing
+local fovCircle = Drawing.new("Circle")
+fovCircle.NumSides = 100
+fovCircle.Thickness = 1
+fovCircle.Filled = false
+fovCircle.Color = Color3.new(1,1,1)
+fovCircle.Visible = false
+
+local redLine = Drawing.new("Line")
+redLine.Thickness = 2
+redLine.Visible = false
+
+-- Helpers
+local function getFOVCenter()
+    if FOV_CenterMouse then
+        return UserInputService:GetMouseLocation()
+    else
+        return Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    end
+end
+
+local function getClosestTarget()
+    local mousePos = getFOVCenter()
+    local best, bestDist = nil, math.huge
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer and pl.Character and pl.Character:FindFirstChild(SilentAim_TargetPart) and pl.Character:FindFirstChild("Humanoid") and pl.Character.Humanoid.Health > 0 then
+            local screenPos, onScreen = Camera:WorldToViewportPoint(pl.Character[SilentAim_TargetPart].Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y)-mousePos).Magnitude
+                if dist <= SilentAim_FOV and dist < bestDist then
+                    bestDist = dist
+                    best = pl
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function findLocalBarrelAttachment()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local tool = char:FindFirstChildWhichIsA("Tool")
+    if not tool then return nil end
+    for _, obj in ipairs(tool:GetDescendants()) do
+        if obj:IsA("Attachment") and (obj.Name:lower():find("barrel") or obj.Name:lower():find("muzzle")) then
+            return obj
+        end
+    end
+    for _, obj in ipairs(tool:GetDescendants()) do
+        if obj:IsA("Attachment") then return obj end
+    end
+    return nil
+end
+
+local function aimAttachmentAt(att, worldPos, smooth)
+    if not att then return end
+    local ok, attCFrame = pcall(function() return att.WorldCFrame end)
+    if ok and attCFrame then
+        local dir = (worldPos - attCFrame.Position)
+        if dir.Magnitude == 0 then return end
+        local goal = CFrame.new(attCFrame.Position, attCFrame.Position+dir.Unit)
+        att.WorldCFrame = attCFrame:Lerp(goal, math.clamp(1-smooth,0,1))
+    end
+end
+
+local function rainbowColor(tick)
+    local r = math.sin(tick*0.1)*0.5+0.5
+    local g = math.sin(tick*0.1+2)*0.5+0.5
+    local b = math.sin(tick*0.1+4)*0.5+0.5
+    return Color3.new(r,g,b)
+end
+
+local tickCount = 0
+local barrelAttachment = nil
+local currentTarget = nil
+
+RunService.RenderStepped:Connect(function()
+    tickCount += 1
+    local fovCenter = getFOVCenter()
+    fovCircle.Position = fovCenter
+    fovCircle.Radius = SilentAim_FOV
+    fovCircle.Visible = SilentAim_Enabled
+
+    if not SilentAim_Enabled then
+        currentTarget = nil
+        barrelAttachment = nil
+        redLine.Visible = false
+        return
+    end
+
+    if not barrelAttachment then barrelAttachment = findLocalBarrelAttachment() end
+    local target = getClosestTarget()
+    currentTarget = target
+
+    if currentTarget and barrelAttachment then
+        local part = currentTarget.Character:FindFirstChild(SilentAim_TargetPart)
+        if part then
+            aimAttachmentAt(barrelAttachment, part.Position, SilentAim_Smooth)
+
+            -- Rainbow line
+            local barrelPos,_ = Camera:WorldToViewportPoint(barrelAttachment.WorldPosition)
+            local targetPos,_ = Camera:WorldToViewportPoint(part.Position)
+            redLine.From = Vector2.new(barrelPos.X, barrelPos.Y)
+            redLine.To = Vector2.new(targetPos.X, targetPos.Y)
+            redLine.Color = rainbowColor(tickCount)
+            redLine.Visible = true
+
+            -- Weapon list
+            local weaponList = {}
+            for _, tool in pairs(currentTarget.Character:GetChildren()) do
+                if tool:IsA("Tool") then
+                    table.insert(weaponList, tool.Name)
+                end
+            end
+        end
+    else
+        redLine.Visible = false
+    end
+end)
+
+-- WindUI Controls
+Tab_Aimbot:Toggle({
+    Title = "Silent Aim (Visual)",
+    Desc = "BarrelAttachment ชี้ไปเป้าผู้เล่น",
+    Icon = "target",
+    Value = false,
+    Callback = function(state)
+        SilentAim_Enabled = state
+        fovCircle.Visible = state
+        redLine.Visible = state
+        barrelAttachment = state and findLocalBarrelAttachment() or nil
+    end
+})
+
+Tab_Aimbot:Slider({
+    Title = "Silent FOV",
+    Desc = "ขนาดวง FOV",
+    Step = 5,
+    Value = {Min=30,Max=600,Default=SilentAim_FOV},
+    Callback = function(value)
+        SilentAim_FOV = value
+        fovCircle.Radius = value
+    end
+})
+
+Tab_Aimbot:Slider({
+    Title = "Silent Smooth",
+    Desc = "ความนุ่มในการหมุน",
+    Step = 0.05,
+    Value = {Min=0.01,Max=1,Default=SilentAim_Smooth},
+    Callback = function(value)
+        SilentAim_Smooth = value
+    end
+})
+
+Tab_Aimbot:Dropdown({
+    Title = "Target Part",
+    Desc = "ส่วนของร่างกายที่จะล็อก",
+    Options = {"Head","HumanoidRootPart"},
+    Default = SilentAim_TargetPart,
+    Callback = function(choice)
+        SilentAim_TargetPart = choice
+    end
+})
+
+Tab_Aimbot:Toggle({
+    Title = "FOV Center Mouse",
+    Desc = "วง FOV ตามเมาส์หรือกลางจอ",
+    Icon = "mouse-pointer",
+    Value = FOV_CenterMouse,
+    Callback = function(state)
+        FOV_CenterMouse = state
+    end
+})
+
+-- ESP Weapon / Box / HP / Name / WalkSpeed สามารถต่อจากนี้ได้เหมือนเดิม
+
+
+
+--------------------------------------------------------
+-- 🔴 ESP Tab
+--------------------------------------------------------
+local Tab_ESP = Window:Tab({
+    Title = "ESP",
+    Icon = "eye",
+})
+
+--------------------------------------------------------
+-- 🟥 ระบบ ESP (Box + HP Bar + NameTag สีแดง)
+--------------------------------------------------------
+local ESP_Enabled = false
+local RunService = game:GetService("RunService")
+local Camera = game.Workspace.CurrentCamera
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ESP_Objects = {}
+
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+
+    local box = Drawing.new("Square")
+    box.Color = Color3.fromRGB(255, 0, 0) -- 🔴 สีแดง
+    box.Thickness = 1
+    box.Filled = false
+    box.Visible = false
+
+    local hpBar = Drawing.new("Line")
+    hpBar.Color = Color3.fromRGB(0, 255, 0)
+    hpBar.Thickness = 3
+    hpBar.Visible = false
+
+    local nameTag = Drawing.new("Text")
+    nameTag.Color = Color3.fromRGB(255, 255, 255)
+    nameTag.Size = 13
+    nameTag.Center = true
+    nameTag.Outline = true
+    nameTag.Font = 2
+    nameTag.Visible = false
+    nameTag.Text = player.Name
+
+    ESP_Objects[player] = {Box = box, HP = hpBar, Name = nameTag}
+end
+
+local function RemoveESP(player)
+    if ESP_Objects[player] then
+        for _, obj in pairs(ESP_Objects[player]) do
+            obj:Remove()
+        end
+        ESP_Objects[player] = nil
+    end
+end
+
+----------------------------------------------------------
+-- 📦 อัปเดตตำแหน่ง ESP
+----------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    if not ESP_Enabled then
+        for _, esp in pairs(ESP_Objects) do
+            esp.Box.Visible = false
+            esp.HP.Visible = false
+            esp.Name.Visible = false
+        end
+        return
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
+            local root = player.Character.HumanoidRootPart
+            local humanoid = player.Character.Humanoid
+            local pos, visible = Camera:WorldToViewportPoint(root.Position)
+            local width, height = 1000 / pos.Z, 1500 / pos.Z
+
+            local esp = ESP_Objects[player]
+            if esp and visible then
+                esp.Box.Visible = true
+                esp.Box.Size = Vector2.new(width, height)
+                esp.Box.Position = Vector2.new(pos.X - width / 2, pos.Y - height / 2)
+                    
+                esp.HP.Visible = true
+                local hpPercent = humanoid.Health / humanoid.MaxHealth
+                esp.HP.From = Vector2.new(esp.Box.Position.X - 5, esp.Box.Position.Y + height)
+                esp.HP.To = Vector2.new(esp.Box.Position.X - 5, esp.Box.Position.Y + height - (height * hpPercent))
+                esp.HP.Color = Color3.fromRGB(255 - (hpPercent * 255), hpPercent * 255, 0)
+
+                esp.Name.Visible = true
+                esp.Name.Position = Vector2.new(pos.X, esp.Box.Position.Y - 15)
+                esp.Name.Text = player.Name
+            else
+                if esp then
+                    esp.Box.Visible = false
+                    esp.HP.Visible = false
+                    esp.Name.Visible = false
+                end
+            end
+        end
+    end
+end)
+
+----------------------------------------------------------
+-- 🧠 ฟังก์ชันเปิด/ปิด ESP
+----------------------------------------------------------
+local function EnableESP()
+    ESP_Enabled = true
+    print("✅ เปิด ESP แล้ว")
+
+    for _, player in pairs(Players:GetPlayers()) do
+        CreateESP(player)
+    end
+    Players.PlayerAdded:Connect(CreateESP)
+    Players.PlayerRemoving:Connect(RemoveESP)
+end
+
+local function DisableESP()
+    ESP_Enabled = false
+    print("❌ ปิด ESP แล้ว")
+
+    for _, player in pairs(Players:GetPlayers()) do
+        RemoveESP(player)
+    end
+end
+
+----------------------------------------------------------
+-- 🕹️ ปุ่ม Toggle WindUI
+----------------------------------------------------------
+Tab_ESP:Toggle({
+    Title = "ESP Box HP Name (Red)",
+    Desc = "ดู Box ESP, ชื่อ, และเลือด สีแดง",
+    Icon = "eye",
+    Type = "Checkbox",
+    Value = false,
+    Callback = function(state)
+        if state then
+            EnableESP()
+        else
+            DisableESP()
+        end
+    end
+})
+
+--------------------------------------------------------
+-- 🟠 Highlight ESP (สีส้ม)
+--------------------------------------------------------
+Tab_ESP:Button({
+    Title = "ESP Highlight (Orange)",
+    Desc = "Highlight ผู้เล่นทุกคนเป็นสีส้ม",
+    Callback = function()
+        local function CreateESP(player)
+            if player.Character and player.Character:FindFirstChild("Head") then
+                if player.Character:FindFirstChild("ESPHighlight") then
+                    player.Character.ESPHighlight:Destroy()
+                end
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "ESPHighlight"
+                highlight.FillColor = Color3.fromRGB(255, 128, 0)
+                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                highlight.FillTransparency = 0.5
+                highlight.Parent = player.Character
+            end
+        end
+
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                CreateESP(player)
+            end
+        end
+
+        Players.PlayerAdded:Connect(function(player)
+            player.CharacterAdded:Connect(function()
+                task.wait(1)
+                CreateESP(player)
+            end)
+        end)
+    end
+})
+
+--------------------------------------------------------
+-- 🩸 ESP Name/HP (สคริปต์ภายนอก)
+--------------------------------------------------------
+Tab_ESP:Toggle({
+    Title = "ESP Name/HP Script",
+    Desc = "โหลดสคริปต์ภายนอก",
+    Icon = "user",
+    Value = false,
+    Callback = function(state)
+        print("ESP Name HP:", state)
+        if state then
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/painkankganike-coder/Cnfmxdmdm/main/Espbox2D.lua", true))()
+        end
+        end
+})
+
+--------------------------------------------------------
+-- 🧩 ESP Weapon (แบบอัปเดตอัตโนมัติ — หายเมื่อไม่มีของ)
+--------------------------------------------------------
+local ESP_Weapon_Enabled = false
+local ESP_Weapon_Objects = {}
+
+-- 🎨 สีแยกตามชนิดของปืน
+local weaponColors = {
+    ["Pistol"] = Color3.fromRGB(0, 200, 255),
+    ["Rifle"] = Color3.fromRGB(255, 255, 0),
+    ["Shotgun"] = Color3.fromRGB(255, 150, 0),
+    ["Sniper"] = Color3.fromRGB(163, 53, 238),
+    ["Explosive"] = Color3.fromRGB(255, 60, 60),
+    ["SMG"] = Color3.fromRGB(0, 255, 0),
+    ["Other"] = Color3.fromRGB(220, 220, 220),
+}
+
+-- 🧠 ตรวจประเภทปืนจากชื่อ
+local function GetWeaponType(name)
+    name = string.lower(name)
+    if string.find(name, "glock") or string.find(name, "c9") or string.find(name, "p226") then
+        return "Pistol"
+    elseif string.find(name, "mp5") or string.find(name, "uzi") or string.find(name, "draco") then
+        return "SMG"
+    elseif string.find(name, "ak47") or string.find(name, "g3") then
+        return "Rifle"
+    elseif string.find(name, "m24") or string.find(name, "hunting") then
+        return "Sniper"
+    elseif string.find(name, "remington") or string.find(name, "sawnoff") or string.find(name, "double barrel") then
+        return "Shotgun"
+    elseif string.find(name, "rpg") or string.find(name, "crossbow") then
+        return "Explosive"
+    else
+        return "Other"
+    end
+end
+
+-- 🔧 สร้าง Drawing Text
+local function CreateWeaponESP(player)
+    if player == LocalPlayer then return end
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Font = 2
+    text.Visible = false
+    ESP_Weapon_Objects[player] = text
+end
+
+-- ❌ ลบ Drawing Text
+local function RemoveWeaponESP(player)
+    if ESP_Weapon_Objects[player] then
+        ESP_Weapon_Objects[player]:Remove()
+        ESP_Weapon_Objects[player] = nil
+    end
+end
+
+-- 🔁 อัปเดตทุกเฟรม (ดูว่ามีของหรือไม่)
+RunService.RenderStepped:Connect(function()
+    if not ESP_Weapon_Enabled then
+        for _, text in pairs(ESP_Weapon_Objects) do
+            text.Visible = false
+        end
+        return
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local pos, visible = Camera:WorldToViewportPoint(root.Position)
+            local espText = ESP_Weapon_Objects[player]
+
+            if espText and visible then
+                local displayText = ""
+                local lastColor = weaponColors.Other
+                local toolCount = 0
+
+                -- หาของในตัวแบบเรียลไทม์
+                for _, tool in pairs(player.Character:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        toolCount += 1
+                        local weaponType = GetWeaponType(tool.Name)
+                        local color = weaponColors[weaponType] or weaponColors.Other
+                        lastColor = color
+                        displayText ..= "🔫 " .. tool.Name .. "\n"
+                    end
+                end
+
+                -- ถ้าไม่มีของ → ไม่แสดง
+                if toolCount == 0 then
+                    espText.Visible = false
+                else
+                    espText.Visible = true
+                    espText.Text = displayText
+                    espText.Color = lastColor
+                    espText.Position = Vector2.new(pos.X, pos.Y + 60)
+                end
+            else
+                if espText then
+                    espText.Visible = false
+                end
+            end
+        end
+    end
+end)
+
+-- ⚙️ เปิด/ปิดระบบ
+local function EnableWeaponESP()
+    ESP_Weapon_Enabled = true
+    print("✅ เปิด ESP Weapon (Dynamic) แล้ว")
+    for _, player in pairs(Players:GetPlayers()) do
+        CreateWeaponESP(player)
+    end
+    Players.PlayerAdded:Connect(CreateWeaponESP)
+    Players.PlayerRemoving:Connect(RemoveWeaponESP)
+end
+
+local function DisableWeaponESP()
+    ESP_Weapon_Enabled = false
+    print("❌ ปิด ESP Weapon แล้ว")
+    for _, player in pairs(Players:GetPlayers()) do
+        RemoveWeaponESP(player)
+    end
+end
+
+--------------------------------------------------------
+-- 🔘 ปุ่มเปิด/ปิดใน WindUI
+--------------------------------------------------------
+Tab_ESP:Toggle({
+    Title = "ESP Weapon (Dynamic)",
+    Desc = "แสดงเฉพาะตอนผู้เล่นถือของ / ถอดออกหายอัตโนมัติ",
+    Icon = "target",
+    Value = false,
+    Callback = function(state)
+        if state then
+            EnableWeaponESP()
+        else
+            DisableWeaponESP()
+        end
+        end
+})
+
+--------------------------------------------------------
+-- 🧍 Character Tab (WalkSpeed + Slider)
+--------------------------------------------------------
+local Tab_Character = Window:Tab({
+    Title = "Character",
+    Icon = "user",
+})
+
+local SpeedEnabled = false
+local DefaultSpeed = 16
+local CustomSpeed = 50
+
+Tab_Character:Toggle({
+    Title = "Walk Speed",
+    Desc = "เปิด/ปิดความเร็วเดิน",
+    Icon = "zap",
+    Value = false,
+    Callback = function(state)
+        SpeedEnabled = state
+        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            if state then
+                humanoid.WalkSpeed = CustomSpeed
+                print("✅ เปิดโหมด Speed (" .. CustomSpeed .. ")")
+            else
+                humanoid.WalkSpeed = DefaultSpeed
+                print("❌ ปิดโหมด Speed กลับเป็นปกติ")
+            end
+        end
+    end
+})
+
+Tab_Character:Slider({
+    Title = "Speed Value",
+    Desc = "ปรับระดับความเร็วการเดิน",
+    Step = 1,
+    Value = {
+        Min = 16,
+        Max = 30,
+        Default = 16,
+    },
+    Callback = function(value)
+        CustomSpeed = value
+        if SpeedEnabled then
+            local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = value
+            end
+        end
+        print("🎚️ ความเร็วถูกตั้งค่าเป็น:", value)
+    end
+})
