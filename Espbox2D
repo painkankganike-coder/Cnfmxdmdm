@@ -1,0 +1,198 @@
+-- ESP 2D Box + Health Bar for Roblox (Lua)
+-- Paste into executor (Synapse X, Krnl, etc.)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+
+local LocalPlayer = Players.LocalPlayer
+local ESPObjects = {}
+
+-- Settings
+local Settings = {
+    Enabled = true,
+    TeamCheck = false,
+    ShowName = true,
+    ShowDistance = true,
+    ShowHealthBar = true,
+    BoxColor = Color3.fromRGB(255, 0, 0),
+    BoxThickness = 2,
+    TextColor = Color3.fromRGB(255, 255, 255),
+    TextSize = 14,
+    TextFont = Drawing.Fonts.UI,
+    HealthBarWidth = 4,
+    HealthBarOffset = 6  -- ระยะห่างจากกรอบ
+}
+
+-- Function to get health color
+local function GetHealthColor(Health, MaxHealth)
+    local Percent = Health / MaxHealth
+    if Percent >= 0.8 then
+        return Color3.fromRGB(0, 255, 0)    -- Green
+    elseif Percent >= 0.5 then
+        return Color3.fromRGB(255, 255, 0)  -- Yellow
+    elseif Percent >= 0.25 then
+        return Color3.fromRGB(255, 165, 0)  -- Orange
+    else
+        return Color3.fromRGB(255, 0, 0)    -- Red
+    end
+end
+
+-- Create ESP for a player
+local function CreateESP(Player)
+    if Player == LocalPlayer then return end
+
+    local Box = Drawing.new("Square")
+    Box.Visible = false
+    Box.Filled = false
+    Box.Thickness = Settings.BoxThickness
+    Box.Color = Settings.BoxColor
+    Box.Transparency = 1
+
+    local NameTag = Drawing.new("Text")
+    NameTag.Visible = false
+    NameTag.Center = true
+    NameTag.Outline = true
+    NameTag.Font = Settings.TextFont
+    NameTag.Size = Settings.TextSize
+    NameTag.Color = Settings.TextColor
+    NameTag.Transparency = 1
+
+    local HealthBarBG = Drawing.new("Square")
+    HealthBarBG.Visible = false
+    HealthBarBG.Filled = true
+    HealthBarBG.Color = Color3.fromRGB(0, 0, 0)
+    HealthBarBG.Transparency = 0.5
+    HealthBarBG.Thickness = 1
+
+    local HealthBar = Drawing.new("Square")
+    HealthBar.Visible = false
+    HealthBar.Filled = true
+    HealthBar.Transparency = 1
+    HealthBar.Thickness = 1
+
+    ESPObjects[Player] = {
+        Box = Box,
+        Name = NameTag,
+        HealthBG = HealthBarBG,
+        Health = HealthBar
+    }
+end
+
+-- Update ESP
+local function UpdateESP()
+    if not Settings.Enabled then return end
+
+    for Player, Drawings in pairs(ESPObjects) do
+        local Character = Player.Character
+        if Character and Character:FindFirstChild("HumanoidRootPart") and Character:FindFirstChild("Humanoid") then
+            local Humanoid = Character.Humanoid
+            local RootPart = Character.HumanoidRootPart
+            local Head = Character:FindFirstChild("Head")
+
+            if Humanoid.Health > 0 and Head then
+                local RootPos, OnScreen = Camera:WorldToViewportPoint(RootPart.Position)
+                local HeadPos, HeadOnScreen = Camera:WorldToViewportPoint(Head.Position + Vector3.new(0, 0.5, 0))
+                local LegPos, LegOnScreen = Camera:WorldToViewportPoint(RootPart.Position - Vector3.new(0, 3.5, 0))
+
+                if OnScreen and HeadOnScreen and LegOnScreen then
+                    local Distance = (Camera.CFrame.Position - RootPart.Position).Magnitude
+                    local BoxHeight = math.abs(HeadPos.Y - LegPos.Y)
+                    local BoxWidth = BoxHeight * 0.6  -- ปรับอัตราส่วนกรอบ
+
+                    local TopY = HeadPos.Y - 10
+                    local BottomY = LegPos.Y + 10
+                    local BoxX = RootPos.X - BoxWidth / 2
+                    local BoxY = TopY
+
+                    -- Update Box
+                    Drawings.Box.Size = Vector2.new(BoxWidth, BoxHeight + 20)
+                    Drawings.Box.Position = Vector2.new(BoxX, BoxY)
+                    Drawings.Box.Visible = true
+
+                    -- Name Tag
+                    local NameText = Player.DisplayName or Player.Name
+                    if Settings.ShowDistance then
+                        NameText = NameText .. " [" .. math.floor(Distance) .. "m]"
+                    end
+                    Drawings.Name.Text = NameText
+                    Drawings.Name.Position = Vector2.new(RootPos.X, HeadPos.Y - 30)
+                    Drawings.Name.Visible = Settings.ShowName
+
+                    -- Health Bar
+                    if Settings.ShowHealthBar then
+                        local HealthPercent = Humanoid.Health / Humanoid.MaxHealth
+                        local BarHeight = (BottomY - TopY) * HealthPercent
+                        local BarY = BottomY - BarHeight
+
+                        -- Background
+                        Drawings.HealthBG.Size = Vector2.new(Settings.HealthBarWidth, BottomY - TopY)
+                        Drawings.HealthBG.Position = Vector2.new(BoxX - Settings.HealthBarOffset - Settings.HealthBarWidth, TopY)
+                        Drawings.HealthBG.Visible = true
+
+                        -- Foreground
+                        Drawings.Health.Size = Vector2.new(Settings.HealthBarWidth, BarHeight)
+                        Drawings.Health.Position = Vector2.new(BoxX - Settings.HealthBarOffset - Settings.HealthBarWidth, BarY)
+                        Drawings.Health.Color = GetHealthColor(Humanoid.Health, Humanoid.MaxHealth)
+                        Drawings.Health.Visible = true
+                    else
+                        Drawings.HealthBG.Visible = false
+                        Drawings.Health.Visible = false
+                    end
+
+                    -- Team Check
+                    if Settings.TeamCheck and Player.Team == LocalPlayer.Team then
+                        Drawings.Box.Visible = false
+                        Drawings.Name.Visible = false
+                        Drawings.HealthBG.Visible = false
+                        Drawings.Health.Visible = false
+                    end
+
+                else
+                    Drawings.Box.Visible = false
+                    Drawings.Name.Visible = false
+                    Drawings.HealthBG.Visible = false
+                    Drawings.Health.Visible = false
+                end
+            else
+                Drawings.Box.Visible = false
+                Drawings.Name.Visible = false
+                Drawings.HealthBG.Visible = false
+                Drawings.Health.Visible = false
+            end
+        else
+            Drawings.Box.Visible = false
+            Drawings.Name.Visible = false
+            Drawings.HealthBG.Visible = false
+            Drawings.Health.Visible = false
+        end
+    end
+end
+
+-- Create ESP for existing players
+for _, Player in pairs(Players:GetPlayers()) do
+    CreateESP(Player)
+end
+
+-- New player joined
+Players.PlayerAdded:Connect(function(Player)
+    Player.CharacterAdded:Connect(function()
+        task.wait(1)
+        CreateESP(Player)
+    end)
+end)
+
+-- Update loop
+RunService.RenderStepped:Connect(UpdateESP)
+
+-- Cleanup
+Players.PlayerRemoving:Connect(function(Player)
+    if ESPObjects[Player] then
+        for _, obj in pairs(ESPObjects[Player]) do
+            obj:Remove()
+        end
+        ESPObjects[Player] = nil
+    end
+end)
+
+print("ESP 2D Box + Health Bar โหลดสำเร็จ!")
