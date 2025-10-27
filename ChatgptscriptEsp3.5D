@@ -1,0 +1,95 @@
+https://raw.githubusercontent.com/ftgs/WindUI/main/library.lua
+
+local Window = WindUI:CreateWindow({
+    Title = "My Hub",
+    SubTitle = "by goskdeg",
+    Theme = "Dark"
+})
+
+-- แท็บ
+local Tab = Window:Tab({
+    Title = "ESP Menu",
+    Icon = "eye"
+})
+
+----------------------------------------------------------
+-- ฟังก์ชัน ESP สีส้ม
+----------------------------------------------------------
+local function createESP(player)
+    if player.Character and not player.Character:FindFirstChild("ESPHighlight") then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESPHighlight"
+        highlight.FillColor = Color3.fromRGB(255, 128, 0) -- 🟧 สีส้มสด
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillTransparency = 0.4
+        highlight.OutlineTransparency = 0
+        highlight.Parent = player.Character
+    end
+end
+
+local function removeESP(player)
+    if player.Character and player.Character:FindFirstChild("ESPHighlight") then
+        player.Character.ESPHighlight:Destroy()
+    end
+end
+
+----------------------------------------------------------
+-- ฟังก์ชันเปิด/ปิด ESP
+----------------------------------------------------------
+local ESPEnabled = false
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ทำให้ ESP ติดตามทุกเหตุการณ์ (เกิดใหม่ / คนเข้าใหม่)
+local function setupPlayer(player)
+    -- เมื่อมีตัวละครใหม่เกิด
+    player.CharacterAdded:Connect(function()
+        if ESPEnabled then
+            wait(1)
+            createESP(player)
+        end
+    end)
+
+    -- สร้าง ESP ให้ทันทีถ้ามีตัวละครอยู่แล้ว
+    if player.Character and ESPEnabled then
+        createESP(player)
+    end
+end
+
+local function toggleESP(state)
+    ESPEnabled = state
+    if state then
+        print("ESP สีส้มเปิดแล้ว 🟧")
+
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                setupPlayer(p)
+            end
+        end
+
+        -- ถ้ามีผู้เล่นใหม่เข้ามา
+        Players.PlayerAdded:Connect(function(p)
+            setupPlayer(p)
+        end)
+
+    else
+        print("ESP สีส้มปิดแล้ว ❌")
+        for _, p in pairs(Players:GetPlayers()) do
+            removeESP(p)
+        end
+    end
+end
+
+----------------------------------------------------------
+-- Toggle UI
+----------------------------------------------------------
+local Toggle = Tab:Toggle({
+    Title = "Orange ESP",
+    Desc = "เปิด/ปิด ESP สีส้ม (ไม่หายตอนตาย)",
+    Icon = "sun",
+    Type = "Checkbox",
+    Value = false,
+    Callback = function(state)
+        toggleESP(state)
+    end
+})
