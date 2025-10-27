@@ -1,0 +1,95 @@
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/ftgs/WindUI/main/library.lua"))()
+
+-- ② สร้างหน้าต่างหลัก
+local Window = WindUI:CreateWindow({
+    Title = "My Hub",
+    SubTitle = "by goskdeg",
+    Theme = "Dark"
+})
+
+-- ③ สร้างแท็บในหน้าต่าง
+local Tab = Window:Tab({
+    Title = "Main",
+    Icon = "user"
+})
+
+------------------------------------------------------------------
+-- 🔹 ส่วนนี้คือที่ไว้ "ฟังก์ชันของคุณ" เช่น ESP, AutoFarm, ฯลฯ
+------------------------------------------------------------------
+
+-- ฟังก์ชันสร้าง Highlight รอบผู้เล่น
+local function createESP(player)
+    if player.Character and not player.Character:FindFirstChild("ESPHighlight") then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESPHighlight"
+        highlight.FillColor = Color3.fromRGB(255, 128, 0)
+        highlight.OutlineColor = Color3.fromRGB(255, 128, 0)
+        highlight.FillTransparency = 0.5
+        highlight.Parent = player.Character
+    end
+end
+
+-- ฟังก์ชันลบ Highlight
+local function removeESP(player)
+    if player.Character and player.Character:FindFirstChild("ESPHighlight") then
+        player.Character.ESPHighlight:Destroy()
+    end
+end
+
+-- ฟังก์ชันเปิด/ปิด ESP ทั้งหมด
+local function toggleESP(state)
+    local players = game:GetService("Players")
+    local localPlayer = players.LocalPlayer
+
+    if state then
+        print("ESP เปิดแล้ว ✅")
+        for _, player in pairs(players:GetPlayers()) do
+            if player ~= localPlayer then
+                createESP(player)
+            end
+        end
+
+        players.PlayerAdded:Connect(function(player)
+            player.CharacterAdded:Connect(function()
+                wait(1)
+                createESP(player)
+            end)
+        end)
+    else
+        print("ESP ปิดแล้ว ❌")
+        for _, player in pairs(players:GetPlayers()) do
+            removeESP(player)
+        end
+    end
+end
+
+------------------------------------------------------------------
+-- 🔸 ส่วนนี้คือ "UI Elements" เช่น Toggle, Button, Input ฯลฯ
+------------------------------------------------------------------
+
+-- Toggle เปิด/ปิด ESP
+local Toggle = Tab:Toggle({
+    Title = "ESP Toggle",
+    Desc = "เปิด/ปิด การมองเห็นผู้เล่น",
+    Icon = "eye",
+    Type = "Checkbox",
+    Value = false,
+    Callback = function(state)
+        toggleESP(state)  -- 👈 เรียกใช้ฟังก์ชันที่เราสร้างด้านบน
+    end
+})
+
+------------------------------------------------------------------
+-- 🔸 จะเพิ่มปุ่มอื่นๆ ต่อได้ตรงนี้ เช่น:
+------------------------------------------------------------------
+
+local Button = Tab:Button({
+    Title = "Test Button",
+    Desc = "กดเพื่อทดสอบ",
+    Icon = "zap",
+    Callback = function()
+        print("ปุ่มทำงานแล้ว ⚡")
+    end end
+})
