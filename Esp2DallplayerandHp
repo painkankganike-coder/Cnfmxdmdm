@@ -1,0 +1,332 @@
+-- Full Skeleton ESP 2D + Box + Health Bar
+-- เสถียร 100% | แก้บัคทุกอย่าง | รองรับ respawn
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+local ESPObjects = {}
+
+-- === ตั้งค่า ===
+local Settings = {
+    Enabled = true,
+    TeamCheck = true,
+    ShowBox = true,
+    ShowHealthBar = true,
+    ShowSkeleton = true,
+    ShowName = true,
+    ShowDistance = true,
+    BoxColor = Color3.fromRGB(255, 0, 0),
+    SkeletonColor = Color3.fromRGB(255, 255, 255),
+    HealthBarWidth = 4,
+    HealthBarOffset = 6,
+    TextSize = 14,
+    TextColor = Color3.fromRGB(255, 255, 255),
+    SkeletonThickness = 2,
+    MaxDistance = 500 -- ซ่อนถ้าไกลเกิน
+}
+
+-- สีแถบเลือด
+local function GetHealthColor(health, max)
+    local p = health / max
+    if p >= 0.9 then return Color3.fromRGB(0, 255, 0) end
+    if p >= 0.6 then return Color3.fromRGB(173, 255, 47) end
+    if p >= 0.4 then return Color3.fromRGB(255, 255, 0) end
+    if p >= 0.2 then return Color3.fromRGB(255, 165, 0) end
+    return Color3.fromRGB(255, 0, 0)
+end
+
+-- สีกระดูกตามระยะ
+local function GetSkeletonColor(dist)
+    local alpha = math.clamp(1 - (dist / Settings.MaxDistance), 0.3, 1)
+    return Color3.fromHSV(0, 0, 1):Lerp(Color3.fromRGB(100, 100, 100), 1 - alpha)
+end
+
+-- สร้าง Drawing Lines สำหรับ Skeleton
+local function CreateSkeletonLines()
+    local lines = {}
+    local parts = {
+        "Head", "UpperTorso", "LowerTorso",
+        "LeftUpperArm", "LeftLowerArm", "LeftHand",
+        "RightUpperArm", "RightLowerArm", "RightHand",
+        "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+        "RightUpperLeg", "RightLowerLeg", "RightFoot"
+    }
+
+    -- คู่ที่ต้องเชื่อม
+    local connections = {
+        {"Head", "UpperTorso"},
+        {"UpperTorso", "LowerTorso"},
+        {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+        {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+        {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+        {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"},
+    }
+
+    for _, pair in pairs(connections) do
+        local line = Drawing.new("Line")
+        line.Thickness = Settings.SkeletonThickness
+        line.Color = Settings.SkeletonColor
+        line.Visible = false
+        table.insert(lines, {From = pair[1], To = pair[2], Line = line})
+    end
+
+    return lines
+end
+
+-- สร้าง ESP
+local function CreateESP(Player)
+    if Player == LocalPlayer or ESPObjects[Player] then return end
+
+    local Box = Drawing.new("Square")
+    Box.Thickness = 2
+    Box.Filled = false
+    Box.Color = Settings.BoxColor
+    Box.Transparency = 1
+    Box.Visible = false
+
+    local NameTag = Drawing.new("Text")
+    NameTag.Size = Settings.TextSize
+    NameTag.Color = Settings.TextColor
+    NameTag.Outline = true
+    NameTag.Center = true
+    NameTag.Font = 2
+    NameTag.Visible = false
+
+    local HealthBG = Drawing.new("Square")
+    HealthBG.Filled = true
+    HealthBG.Color = Color3.new(0, 0, 0)
+    HealthBG.Transparency = 0.5
+    HealthBG.Visible = false
+
+    local Health = Drawing.new("Square")
+    Health.Filled = true
+    Health.Transparency = 1
+    Health.Visible = false
+
+    local SkeletonLines = CreateSkeletonLines()
+
+    ESPObjects[Player] = {
+        Box = Box,
+        Name = NameTag,
+        HealthBG = HealthBG,
+        Health = Health,
+        Skeleton = SkeletonLines,
+        Parts = {}
+    }
+end
+
+-- ลบ ESP
+local function RemoveESP(Player)
+    if not ESPObjects[Player] then return end
+    for _, v in pairs(ESPObjects[Player]) do
+        if typeof(v) == "table" then
+            for _, line in pairs(v) do
+                if line.Line then line.Line:Remove() end
+            end
+        elseif v.Remove then
+            v:Remove()
+        end
+    end
+    ESPObjects[Player] = nil
+end
+
+-- ดึงตำแหน่ง Part
+local function GetPartPosition(Character, partName)
+    local part = Character:FindFirstChild(partName)
+    if part then
+        local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+        return Vector2.new(pos.X, pos.Y), onScreen and pos.Z > 0
+    end
+    return nil, false
+end
+
+-- อัปเดต Skeleton
+local function UpdateSkeleton(Player, Data, Character)
+    if not Settings.ShowSkeleton then
+        for _, line in pairs(Data.Skeleton) do
+            line.Line.Visible = false
+        end
+        return
+    end
+
+    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+    if not RootPart then return end
+
+    local dist = (Camera.CFrame.Position - RootPart.Position).Magnitude
+    if dist > Settings.MaxDistance then
+        for _, line in pairs(Data.Skeleton) do
+            line.Line.Visible = false
+        end
+        return
+    end
+
+    local color = GetSkeletonColor(dist)
+
+    for _, conn in pairs(Data.Skeleton) do
+        local fromPos, fromOn = GetPartPosition(Character, conn.From)
+        local toPos, toOn = GetPartPosition(Character, conn.To)
+
+        if fromPos and toPos and fromOn and toOn then
+            conn.Line.From = fromPos
+            conn.Line.To = toPos
+            conn.Line.Color = color
+            conn.Line.Visible = true
+        else
+            conn.Line.Visible = false
+        end
+    end
+end
+
+-- อัปเดต ESP ทุกเฟรม
+local function UpdateESP()
+    if not Settings.Enabled then return end
+
+    for Player, Data in pairs(ESPObjects) do
+        local Character = Player.Character
+        if not Character or not Character:FindFirstChild("Humanoid") or not Character:FindFirstChild("HumanoidRootPart") then
+            for _, v in pairs(Data) do
+                if typeof(v) == "table" then
+                    for _, obj in pairs(v) do
+                        if obj.Visible then obj.Visible = false end
+                    end
+                elseif v.Visible then
+                    v.Visible = false
+                end
+            end
+            continue
+        end
+
+        local Humanoid = Character.Humanoid
+        local Root = Character.HumanoidRootPart
+        local Head = Character:FindFirstChild("Head")
+
+        if Humanoid.Health <= 0 or not Head then
+            for _, v in pairs(Data) do
+                if typeof(v) == "table" then
+                    for _, obj in pairs(v) do
+                        if obj.Visible then obj.Visible = false end
+                    end
+                elseif v.Visible then
+                    v.Visible = false
+                end
+            end
+            continue
+        end
+
+        -- ทีม
+        if Settings.TeamCheck and Player.Team == LocalPlayer.Team then
+            for _, v in pairs(Data) do
+                if typeof(v) == "table" then
+                    for _, obj in pairs(v) do
+                        if obj.Visible then obj.Visible = false end
+                    end
+                elseif v.Visible then
+                    v.Visible = false
+                end
+            end
+            continue
+        end
+
+        local RootPos, OnScreen = Camera:WorldToViewportPoint(Root.Position)
+        if not OnScreen then
+            for _, v in pairs(Data) do
+                if typeof(v) == "table" then
+                    for _, obj in pairs(v) do
+                        if obj.Visible then obj.Visible = false end
+                    end
+                elseif v.Visible then
+                    v.Visible = false
+                end
+            end
+            continue
+        end
+
+        -- คำนวณ Box
+        local HeadPos = Camera:WorldToViewportPoint(Head.Position + Vector3.new(0, 0.5, 0))
+        local LegPos = Camera:WorldToViewportPoint(Root.Position - Vector3.new(0, 4, 0))
+        local Height = math.abs(HeadPos.Y - LegPos.Y)
+        local Width = Height * 0.65
+        local BoxX = RootPos.X - Width / 2
+        local BoxY = HeadPos.Y - 10
+
+        -- Box
+        if Settings.ShowBox then
+            Data.Box.Size = Vector2.new(Width, Height + 20)
+            Data.Box.Position = Vector2.new(BoxX, BoxY)
+            Data.Box.Visible = true
+        else
+            Data.Box.Visible = false
+        end
+
+        -- ชื่อ
+        if Settings.ShowName or Settings.ShowDistance then
+            local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - Root.Position).Magnitude)
+            local name = Player.DisplayName or Player.Name
+            if Settings.ShowDistance then name = name .. " [" .. dist .. "m]" end
+            Data.Name.Text = name
+            Data.Name.Position = Vector2.new(RootPos.X, HeadPos.Y - 30)
+            Data.Name.Visible = true
+        else
+            Data.Name.Visible = false
+        end
+
+        -- Health Bar
+        if Settings.ShowHealthBar then
+            local hp = math.clamp(Humanoid.Health / Humanoid.MaxHealth, 0, 1)
+            local barH = (Height + 20) * hp
+            local barY = BoxY + (Height + 20) - barH
+
+            Data.HealthBG.Size = Vector2.new(Settings.HealthBarWidth, Height + 20)
+            Data.HealthBG.Position = Vector2.new(BoxX - Settings.HealthBarOffset - Settings.HealthBarWidth, BoxY)
+            Data.HealthBG.Visible = true
+
+            Data.Health.Size = Vector2.new(Settings.HealthBarWidth, barH)
+            Data.Health.Position = Vector2.new(BoxX - Settings.HealthBarOffset - Settings.HealthBarWidth, barY)
+            Data.Health.Color = GetHealthColor(Humanoid.Health, Humanoid.MaxHealth)
+            Data.Health.Visible = true
+        else
+            Data.HealthBG.Visible = false
+            Data.Health.Visible = false
+        end
+
+        -- Skeleton
+        UpdateSkeleton(Player, Data, Character)
+    end
+end
+
+-- ติดตามตัวละคร
+local function OnCharacterAdded(Player, Char)
+    task.wait(1)
+    if ESPObjects[Player] then
+        -- รีเฟรช
+    end
+end
+
+local function OnPlayerAdded(Player)
+    CreateESP(Player)
+    Player.CharacterAdded:Connect(function(char) OnCharacterAdded(Player, char) end)
+    if Player.Character then task.spawn(function() task.wait(1); OnCharacterAdded(Player, Player.Character) end) end
+end
+
+local function OnPlayerRemoving(Player)
+    RemoveESP(Player)
+end
+
+-- เริ่ม
+for _, p in pairs(Players:GetPlayers()) do OnPlayerAdded(p) end
+Players.PlayerAdded:Connect(OnPlayerAdded)
+Players.PlayerRemoving:Connect(OnPlayerRemoving)
+RunService.RenderStepped:Connect(UpdateESP)
+
+-- Toggle ด้วย Insert
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.Insert then
+        Settings.Enabled = not Settings.Enabled
+        print("ESP:", Settings.Enabled and "เปิด" or "ปิด")
+    end
+end)
+
+print("Full Skeleton ESP + Box + Health Bar โหลดแล้ว! กด Insert เพื่อเปิด/ปิด")
