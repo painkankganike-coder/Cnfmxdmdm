@@ -1,0 +1,663 @@
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local WindUI = WindUILoad
+local Window = WindUI:CreateWindow({
+    Title = "HOON Hub",
+    Icon = "gun",
+    Author = "by As4r",
+    Folder = "HOON Hub",
+    Theme = "Dark",
+})
+
+Window:EditOpenButton({
+    Title = "HOON Hub | test",
+    Icon = "gun",
+    Color = ColorSequence.new(
+        Color3.fromHex("FF0F7B"),
+        Color3.fromHex("F89B29")
+    ),
+})
+
+-- =========================
+-- Services (single declarations)
+-- =========================
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- Safety: wait for LocalPlayer if needed
+if not LocalPlayer then
+    LocalPlayer = Players:GetPropertyChangedSignal("LocalPlayer")
+    -- If still nil, abort
+    if not Players.LocalPlayer then
+        warn("[HOON Hub] LocalPlayer not available.")
+        return
+    end
+    LocalPlayer = Players.LocalPlayer
+end
+
+-- =========================
+-- Tabs
+-- =========================
+local Tab_Aimbot = Window:Tab({Title = "Aimbot", Icon = "crosshair"})
+local Tab_ESP = Window:Tab({Title = "ESP", Icon = "eye"})
+local Tab_Character = Window:Tab({Title = "Character", Icon = "user"})
+
+-- =========================
+-- Drawing helpers (wrap to avoid errors if Drawing not available)
+-- =========================
+local DrawingNew = Drawing and Drawing.new
+if not DrawingNew then
+    warn("[HOON Hub] Drawing API not available in this environment.")
+    -- We'll continue but drawing features will be no-op
+end
+
+local function SafeNewDrawing(kind)
+    if not DrawingNew then return nil end
+    local ok, obj = pcall(function() return DrawingNew(kind) end)
+    if not ok then return nil end
+    return obj
+end
+
+-- =========================
+-- Aimbot (Full Rainbow) - Tab_Aimbot
+-- =========================
+do
+    local Aimbot_Enabled = false
+    local Aimbot_ShowFOV = true
+    local Aimbot_FOV = 120
+    local Aimbot_Smoothness = 0.25
+    local Aimbot_HoldToAim = false
+    local Aimbot_ProjectileSpeed = 0
+    local Aimbot_TargetPart = "Head"
+    local Rainbow_HueSpeed = 0.6
+
+    -- Drawing
+    local fovCircle = SafeNewDrawing("Circle")
+    if fovCircle then
+        fovCircle.Visible = false
+        fovCircle.Radius = Aimbot_FOV
+        fovCircle.Thickness = 2
+        fovCircle.NumSides = 100
+        fovCircle.Filled = false
+        fovCircle.Color = Color3.fromHSV(0,1,1)
+    end
+
+    local tracerLine = SafeNewDrawing("Line")
+    if tracerLine then
+        tracerLine.Visible = false
+        tracerLine.Thickness = 2
+    end
+
+    local function mousePos()
+        return UserInputService:GetMouseLocation()
+    end
+
+    local function getPredictedPosition(part, projSpeed)
+        if not part then return nil end
+        if projSpeed and projSpeed > 0 then
+            local dir = part.Position - Camera.CFrame.Position
+            local dist = dir.Magnitude
+            if projSpeed <= 0 then return part.Position end
+            local travel = dist / projSpeed
+            local vel = Vector3.new(0,0,0)
+            local root = part.Parent and part.Parent:FindFirstChild("HumanoidRootPart")
+            if root and root:IsA("BasePart") then
+                vel = root.AssemblyLinearVelocity
+            end
+            return part.Position + vel * travel
+        else
+            return part.Position
+        end
+    end
+
+    local function getClosestTarget()
+        local center = mousePos()
+        local best = nil
+        local bestDist = math.huge
+        for _, pl in ipairs(Players:GetPlayers()) do
+            if pl ~= Players.LocalPlayer and pl.Character and pl.Character:FindFirstChild(Aimbot_TargetPart) and pl.Character:FindFirstChild("Humanoid") then
+                local hum = pl.Character:FindFirstChild("Humanoid")
+                if hum and hum.Health > 0 then
+                    local part = pl.Character:FindFirstChild(Aimbot_TargetPart)
+                    if part then
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                        if onScreen then
+                            local screenVec = Vector2.new(screenPos.X, screenPos.Y)
+                            local dist = (screenVec - center).Magnitude
+                            if dist <= Aimbot_FOV and dist < bestDist then
+                                bestDist = dist
+                                best = pl
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return best
+    end
+
+    local function aimAt(worldPos, smooth)
+        if not worldPos then return end
+        local camPos = Camera.CFrame.Position
+        local dir = (worldPos - camPos)
+        if dir.Magnitude == 0 then return end
+        local goal = CFrame.new(camPos, camPos + dir.Unit)
+        Camera.CFrame = Camera.CFrame:Lerp(goal, math.clamp(smooth, 0, 1))
+    end
+
+    -- rainbow hue
+    local hue = 0
+
+    RunService.RenderStepped:Connect(function(dt)
+        -- update hue
+        hue = (hue + dt * Rainbow_HueSpeed) % 1
+        local color = Color3.fromHSV(hue, 1, 1)
+
+        -- update FOV circle if exists
+        if fovCircle then
+            fovCircle.Position = mousePos()
+            fovCircle.Radius = Aimbot_FOV
+            fovCircle.Color = color
+            fovCircle.Visible = Aimbot_Enabled and Aimbot_ShowFOV
+        end
+
+        if tracerLine then
+            tracerLine.Visible = false
+        end
+
+        if not Aimbot_Enabled then return end
+
+        if Aimbot_HoldToAim then
+            if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+                return
+            end
+        end
+
+        local targetPlayer = getClosestTarget()
+        if not targetPlayer then return end
+        local targetPart = targetPlayer.Character and targetPlayer.Character:FindFirstChild(Aimbot_TargetPart)
+        if not targetPart then return end
+
+        local aimPos = getPredictedPosition(targetPart, Aimbot_ProjectileSpeed)
+        if aimPos then
+            aimAt(aimPos, Aimbot_Smoothness)
+        end
+
+        -- tracer
+        if tracerLine and targetPart then
+            local tPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+            if onScreen then
+                local screenFrom = mousePos()
+                tracerLine.From = Vector2.new(screenFrom.X, screenFrom.Y)
+                tracerLine.To = Vector2.new(tPos.X, tPos.Y)
+                tracerLine.Color = color
+                tracerLine.Visible = true
+            end
+        end
+    end)
+
+    -- WindUI controls
+    Tab_Aimbot:Toggle({
+        Title = "Aimbot (Nearest Head)",
+        Desc = "ล็อกหัวผู้เล่นที่ใกล้สุด (client-side camera only)",
+        Icon = "target",
+        Value = false,
+        Callback = function(state)
+            Aimbot_Enabled = state
+            if fovCircle then fovCircle.Visible = state and Aimbot_ShowFOV end
+            if tracerLine then tracerLine.Visible = state end
+        end
+    })
+
+    Tab_Aimbot:Toggle({
+        Title = "Show FOV",
+        Desc = "แสดงวง FOV รอบเมาส์",
+        Icon = "circle",
+        Value = true,
+        Callback = function(state)
+            Aimbot_ShowFOV = state
+            if fovCircle then fovCircle.Visible = state and Aimbot_Enabled end
+        end
+    })
+
+    Tab_Aimbot:Slider({
+        Title = "FOV Size",
+        Desc = "ขนาดวง FOV (พิกเซล)",
+        Step = 5,
+        Value = {Min = 30, Max = 800, Default = Aimbot_FOV},
+        Callback = function(value)
+            Aimbot_FOV = value
+            if fovCircle then fovCircle.Radius = value end
+        end
+    })
+
+    Tab_Aimbot:Slider({
+        Title = "Smoothness",
+        Desc = "ค่าความนุ่มของการหมุนกล้อง (0.01..1.0)",
+        Step = 0.01,
+        Value = {Min = 0.01, Max = 1.0, Default = Aimbot_Smoothness},
+        Callback = function(value)
+            Aimbot_Smoothness = value
+        end
+    })
+
+    Tab_Aimbot:Toggle({
+        Title = "Hold to Aim (RMB)",
+        Desc = "ถ้าเปิด ต้องกดขวาค้างเพื่อให้ aimbot ทำงาน",
+        Icon = "mouse-pointer",
+        Value = false,
+        Callback = function(state)
+            Aimbot_HoldToAim = state
+        end
+    })
+
+    Tab_Aimbot:Dropdown({
+        Title = "Target Part",
+        Desc = "เลือกส่วนที่จะล็อก",
+        Options = {"Head", "HumanoidRootPart"},
+        Default = Aimbot_TargetPart,
+        Callback = function(choice)
+            Aimbot_TargetPart = choice
+        end
+    })
+
+    Tab_Aimbot:Slider({
+        Title = "Projectile Speed",
+        Desc = "ปรับค่าสำหรับการพยากรณ์ (studs/sec). ตั้ง 0 เพื่อปิด prediction",
+        Step = 10,
+        Value = {Min = 0, Max = 5000, Default = Aimbot_ProjectileSpeed},
+        Callback = function(value)
+            Aimbot_ProjectileSpeed = value
+        end
+    })
+
+    Tab_Aimbot:Slider({
+        Title = "Rainbow Hue Speed",
+        Desc = "ความเร็วการไล่สีรุ้ง (ยิ่งมากยิ่งเร็ว)",
+        Step = 0.05,
+        Value = {Min = 0.05, Max = 5, Default = Rainbow_HueSpeed},
+        Callback = function(value)
+            Rainbow_HueSpeed = value
+        end
+    })
+end -- end Aimbot block
+
+-- =========================
+-- ESP: Box (orange), Name (small), HP Bar, Highlight - Tab_ESP
+-- =========================
+do
+    -- Shared state
+    local ESP_Box_Enabled = false
+    local ESP_Name_Enabled = false
+    local ESP_HP_Enabled = false
+
+    local ESP_Box_Objects = {}
+    local ESP_Name_Objects = {}
+    local ESP_HP_Objects = {}
+
+    -- Create / Remove helpers
+    local function CreateESPBox(player)
+        if player == Players.LocalPlayer then return end
+        if ESP_Box_Objects[player] then return end
+        local box = SafeNewDrawing("Square")
+        if not box then return end
+        box.Color = Color3.fromRGB(255,140,0)
+        box.Thickness = 1.5
+        box.Filled = false
+        box.Visible = false
+        ESP_Box_Objects[player] = {Box = box}
+    end
+
+    local function RemoveESPBox(player)
+        local t = ESP_Box_Objects[player]
+        if t then
+            for _, v in pairs(t) do
+                pcall(function() v:Remove() end)
+            end
+            ESP_Box_Objects[player] = nil
+        end
+    end
+
+    local function CreateNameTag(player)
+        if player == Players.LocalPlayer then return end
+        if ESP_Name_Objects[player] then return end
+        local txt = SafeNewDrawing("Text")
+        if not txt then return end
+        txt.Size = 13
+        txt.Color = Color3.fromRGB(255,255,255)
+        txt.Center = true
+        txt.Outline = true
+        txt.Visible = false
+        txt.Font = 2
+        ESP_Name_Objects[player] = {Name = txt}
+    end
+
+    local function RemoveNameTag(player)
+        local t = ESP_Name_Objects[player]
+        if t then
+            for _, v in pairs(t) do
+                pcall(function() v:Remove() end)
+            end
+            ESP_Name_Objects[player] = nil
+        end
+    end
+
+    local function CreateHPBar(player)
+        if player == Players.LocalPlayer then return end
+        if ESP_HP_Objects[player] then return end
+        local hp = SafeNewDrawing("Line")
+        if not hp then return end
+        hp.Thickness = 3
+        hp.Color = Color3.fromRGB(0,255,0)
+        hp.Visible = false
+        ESP_HP_Objects[player] = {HP = hp}
+    end
+
+    local function RemoveHPBar(player)
+        local t = ESP_HP_Objects[player]
+        if t then
+            for _, v in pairs(t) do
+                pcall(function() v:Remove() end)
+            end
+            ESP_HP_Objects[player] = nil
+        end
+    end
+
+    -- Create initial for players
+    for _, pl in pairs(Players:GetPlayers()) do
+        CreateESPBox(pl)
+        CreateNameTag(pl)
+        CreateHPBar(pl)
+    end
+
+    Players.PlayerAdded:Connect(function(pl)
+        CreateESPBox(pl)
+        CreateNameTag(pl)
+        CreateHPBar(pl)
+    end)
+    Players.PlayerRemoving:Connect(function(pl)
+        RemoveESPBox(pl)
+        RemoveNameTag(pl)
+        RemoveHPBar(pl)
+    end)
+
+    -- Update loop
+    RunService.RenderStepped:Connect(function()
+        -- BOX
+        if ESP_Box_Enabled then
+            for _, pl in pairs(Players:GetPlayers()) do
+                if pl ~= Players.LocalPlayer and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+                    local root = pl.Character:FindFirstChild("HumanoidRootPart")
+                    local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                    local obj = ESP_Box_Objects[pl]
+                    if obj and onScreen then
+                        local height = 2000 / pos.Z
+                        local width = height / 1.5
+                        obj.Box.Size = Vector2.new(width, height)
+                        obj.Box.Position = Vector2.new(pos.X - width/2, pos.Y - height/2)
+                        obj.Box.Visible = true
+                    elseif obj then
+                        obj.Box.Visible = false
+                    end
+                end
+            end
+        else
+            for _, v in pairs(ESP_Box_Objects) do
+                v.Box.Visible = false
+            end
+        end
+
+        -- NAME
+        if ESP_Name_Enabled then
+            for _, pl in pairs(Players:GetPlayers()) do
+                if pl ~= Players.LocalPlayer and pl.Character and pl.Character:FindFirstChild("Head") then
+                    local head = pl.Character:FindFirstChild("Head")
+                    local pos, onScreen = Camera:WorldToViewportPoint(head.Position + Vector3.new(0,1.5,0))
+                    local obj = ESP_Name_Objects[pl]
+                    if obj and onScreen then
+                        local distance = 0
+                        if Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            distance = (Players.LocalPlayer.Character.HumanoidRootPart.Position - head.Position).Magnitude
+                        end
+                        local size = math.clamp(13 - (distance / 150), 10, 13) -- small overall
+                        obj.Name.Text = pl.Name
+                        obj.Name.Size = size
+                        obj.Name.Position = Vector2.new(pos.X, pos.Y - 20)
+                        obj.Name.Visible = true
+                    elseif obj then
+                        obj.Name.Visible = false
+                    end
+                end
+            end
+        else
+            for _, v in pairs(ESP_Name_Objects) do
+                v.Name.Visible = false
+            end
+        end
+
+        -- HP
+        if ESP_HP_Enabled then
+            for _, pl in pairs(Players:GetPlayers()) do
+                if pl ~= Players.LocalPlayer and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") and pl.Character:FindFirstChild("Humanoid") then
+                    local root = pl.Character:FindFirstChild("HumanoidRootPart")
+                    local hum = pl.Character:FindFirstChild("Humanoid")
+                    local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                    local obj = ESP_HP_Objects[pl]
+                    if obj and onScreen then
+                        local height = 2000 / pos.Z
+                        local width = height / 1.5
+                        local x = pos.X - width / 2
+                        local y = pos.Y - height / 2
+                        local hpPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                        obj.HP.From = Vector2.new(x - 6, y + height)
+                        obj.HP.To = Vector2.new(x - 6, y + height - (height * hpPercent))
+                        obj.HP.Color = Color3.fromRGB(255 - (hpPercent * 255), hpPercent * 255, 0)
+                        obj.HP.Visible = true
+                    elseif obj then
+                        obj.HP.Visible = false
+                    end
+                end
+            end
+        else
+            for _, v in pairs(ESP_HP_Objects) do
+                v.HP.Visible = false
+            end
+        end
+    end)
+
+    -- Highlight button
+    Tab_ESP:Button({
+        Title = "Highlight (Orange)",
+        Desc = "Highlight ผู้เล่นทุกคนเป็นสีส้ม",
+        Callback = function()
+            local function DoHighlight(pl)
+                if pl.Character and pl.Character:FindFirstChild("Head") then
+                    if pl.Character:FindFirstChild("ESPHighlight") then
+                        pl.Character.ESPHighlight:Destroy()
+                    end
+                    local highlight = Instance.new("Highlight")
+                    highlight.Name = "ESPHighlight"
+                    highlight.FillColor = Color3.fromRGB(255,128,0)
+                    highlight.OutlineColor = Color3.fromRGB(255,255,255)
+                    highlight.FillTransparency = 0.5
+                    highlight.Parent = pl.Character
+                end
+            end
+            for _, pl in pairs(Players:GetPlayers()) do
+                if pl ~= Players.LocalPlayer then DoHighlight(pl) end
+            end
+            Players.PlayerAdded:Connect(function(pl)
+                pl.CharacterAdded:Connect(function()
+                    task.wait(1)
+                    DoHighlight(pl)
+                end)
+            end)
+        end
+    })
+
+    -- Toggles in UI
+    Tab_ESP:Toggle({
+        Title = "Box (Orange)",
+        Desc = "แสดงกล่องรอบผู้เล่น",
+        Icon = "square",
+        Value = false,
+        Callback = function(state)
+            ESP_Box_Enabled = state
+        end
+    })
+
+    Tab_ESP:Toggle({
+        Title = "Name (Small)",
+        Desc = "แสดงชื่อผู้เล่นขนาดเล็ก",
+        Icon = "user",
+        Value = false,
+        Callback = function(state)
+            ESP_Name_Enabled = state
+        end
+    })
+
+    Tab_ESP:Toggle({
+        Title = "HP Bar",
+        Desc = "แสดงแถบเลือดด้านข้าง",
+        Icon = "activity",
+        Value = false,
+        Callback = function(state)
+            ESP_HP_Enabled = state
+        end
+    })
+end -- end ESP block
+
+-- =========================
+-- Character Tab: WalkSpeed, SuperJump (fixed), Mud Warp (warp+slider)
+-- =========================
+do
+    -- WalkSpeed
+    local SpeedEnabled = false
+    local DefaultSpeed = 16
+    local CustomSpeed = 16
+
+    Tab_Character:Toggle({
+        Title = "Walk Speed",
+        Desc = "เปิด/ปิดความเร็วเดิน",
+        Icon = "zap",
+        Value = false,
+        Callback = function(state)
+            SpeedEnabled = state
+            local char = Players.LocalPlayer.Character
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                if state then
+                    humanoid.WalkSpeed = CustomSpeed
+                else
+                    humanoid.WalkSpeed = DefaultSpeed
+                end
+            end
+        end
+    })
+
+    Tab_Character:Slider({
+        Title = "Speed Value",
+        Desc = "ปรับความเร็วการเดิน",
+        Step = 1,
+        Value = {Min = 16, Max = 35, Default = CustomSpeed},
+        Callback = function(value)
+            CustomSpeed = value
+            if SpeedEnabled then
+                local char = Players.LocalPlayer.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if humanoid then humanoid.WalkSpeed = value end
+            end
+        end
+    })
+
+    -- Super Jump (fixed; change value inside code to modify)
+    local SuperJump_Enabled = false
+    local SuperJumpPower = 40 -- 
+
+    local function ApplyJumpPower(value)
+        local char = Players.LocalPlayer.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.UseJumpPower = true
+            humanoid.JumpPower = value
+        end
+    end
+
+    Tab_Character:Toggle({
+        Title = "Super Jump",
+        Desc = "เปิด/ปิดกระโดดสูง",
+        Icon = "arrow-up",
+        Value = false,
+        Callback = function(state
+            if state then
+                ApplyJumpPower(SuperJumpPower)
+            else
+                ApplyJumpPower(50) -- ค่ากระโดดปกติ
+            end
+        end
+    })
+
+    -- ให้ค่ากระโดดกลับมาตอน respawn
+    Players.LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(1)
+        if SuperJump_Enabled then
+            ApplyJumpPower(SuperJumpPower)
+        end
+    end)
+
+    -- =========================
+    -- Mud Warp (warp under ground)
+    -- =========================
+    local MudEnabled = false
+    local MudDepth = 10 -- 👈 ปรับความลึกที่ต้องการ (studs)
+
+    local function DoMudWarp(state)
+        MudEnabled = state
+        local char = Players.LocalPlayer.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        if state then
+            hrp.CFrame = hrp.CFrame - Vector3.new(0, MudDepth, 0)
+        else
+            hrp.CFrame = hrp.CFrame + Vector3.new(0, MudDepth, 0)
+        end
+    end
+
+    Tab_Character:Toggle({
+        Title = "Mud Warp",
+        Desc = "วาร์ปลงใต้พื้นตามความลึก",
+        Icon = "arrow-down",
+        Value = false,
+        Callback = function(state)
+            DoMudWarp(state)
+        end
+    })
+
+    Tab_Character:Slider({
+        Title = "Mud Depth",
+        Desc = "ปรับความลึกในการมุด (studs)",
+        Step = 1,
+        Value = {Min = 1, Max = 200, Default = MudDepth},
+        Callback = function(value)
+            -- อัปเดตค่าความลึก
+            if MudEnabled then
+                local char = Players.LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local hrp = char.HumanoidRootPart
+                    -- ยกขึ้นมาก่อนแล้วลงใหม่
+                    hrp.CFrame = hrp.CFrame + Vector3.new(0, MudDepth, 0)
+                    MudDepth = value
+                    hrp.CFrame = hrp.CFrame - Vector3.new(0, MudDepth, 0)
+                else
+                    MudDepth = value
+                end
+            else
+                MudDepth = value
+            end
+        end
+    })
+    end
