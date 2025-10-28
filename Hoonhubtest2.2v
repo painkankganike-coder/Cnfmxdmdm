@@ -10,32 +10,12 @@ local Window = WindUI:CreateWindow({
 
 Window:EditOpenButton({
     Title = "HOON Hub | test",
-    Icon = "gun",
+    Icon = "eye",
     Color = ColorSequence.new(
         Color3.fromHex("FF0F7B"),
         Color3.fromHex("F89B29")
     ),
 })
-
--- =========================
--- Services (single declarations)
--- =========================
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-
--- Safety: wait for LocalPlayer if needed
-if not LocalPlayer then
-    LocalPlayer = Players:GetPropertyChangedSignal("LocalPlayer")
-    -- If still nil, abort
-    if not Players.LocalPlayer then
-        warn("[HOON Hub] LocalPlayer not available.")
-        return
-    end
-    LocalPlayer = Players.LocalPlayer
-end
 
 -- =========================
 -- Tabs
@@ -44,21 +24,7 @@ local Tab_Aimbot = Window:Tab({Title = "Aimbot", Icon = "crosshair"})
 local Tab_ESP = Window:Tab({Title = "ESP", Icon = "eye"})
 local Tab_Character = Window:Tab({Title = "Character", Icon = "user"})
 
--- =========================
--- Drawing helpers (wrap to avoid errors if Drawing not available)
--- =========================
-local DrawingNew = Drawing and Drawing.new
-if not DrawingNew then
-    warn("[HOON Hub] Drawing API not available in this environment.")
-    -- We'll continue but drawing features will be no-op
-end
 
-local function SafeNewDrawing(kind)
-    if not DrawingNew then return nil end
-    local ok, obj = pcall(function() return DrawingNew(kind) end)
-    if not ok then return nil end
-    return obj
-end
 
 -- =========================
 -- Aimbot (Full Rainbow) - Tab_Aimbot
