@@ -1,12 +1,5 @@
-local ok, WindUILoad = pcall(function()
-    return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-end)
-if not ok or not WindUILoad then
-    warn("[HOON Hub] ไม่สามารถโหลด WindUI ได้")
-    return
-end
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
-local WindUI = WindUILoad
 local Window = WindUI:CreateWindow({
     Title = "HOON Hub",
     Icon = "gun",
