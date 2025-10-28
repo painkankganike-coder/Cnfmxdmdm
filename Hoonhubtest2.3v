@@ -24,231 +24,114 @@ local Tab_Aimbot = Window:Tab({Title = "Aimbot", Icon = "crosshair"})
 local Tab_ESP = Window:Tab({Title = "ESP", Icon = "eye"})
 local Tab_Character = Window:Tab({Title = "Character", Icon = "user"})
 
+--------------------------------------------------------
+-- 🟢 Aimbot Tab
+--------------------------------------------------------
+local Tab_Aimbot = Window:Tab({
+    Title = "Aimbot",
+    Icon = "crosshair",
+})
 
+-- Services
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
 
--- =========================
--- Aimbot (Full Rainbow) - Tab_Aimbot
--- =========================
-do
-    local Aimbot_Enabled = false
-    local Aimbot_ShowFOV = true
-    local Aimbot_FOV = 120
-    local Aimbot_Smoothness = 0.25
-    local Aimbot_HoldToAim = false
-    local Aimbot_ProjectileSpeed = 0
-    local Aimbot_TargetPart = "Head"
-    local Rainbow_HueSpeed = 0.6
+-- Variables
+local Aimbot_Enabled = false
+local FOV_Radius = 120
+local FOV_Thickness = 2
+local Aimbot_Smooth = 0.35
+local TargetPart = "Head"
 
-    -- Drawing
-    local fovCircle = SafeNewDrawing("Circle")
-    if fovCircle then
-        fovCircle.Visible = false
-        fovCircle.Radius = Aimbot_FOV
-        fovCircle.Thickness = 2
-        fovCircle.NumSides = 100
-        fovCircle.Filled = false
-        fovCircle.Color = Color3.fromHSV(0,1,1)
-    end
+-- 🌈 FOV Circle (Rainbow)
+local fovCircle = Drawing.new("Circle")
+fovCircle.NumSides = 100
+fovCircle.Thickness = FOV_Thickness
+fovCircle.Radius = FOV_Radius
+fovCircle.Filled = false
+fovCircle.Visible = false
 
-    local tracerLine = SafeNewDrawing("Line")
-    if tracerLine then
-        tracerLine.Visible = false
-        tracerLine.Thickness = 2
-    end
+local hue = 0
+local function updateRainbowColor()
+    hue = (hue + 1) % 360
+    local color = Color3.fromHSV(hue/360, 1, 1)
+    fovCircle.Color = color
+end
 
-    local function mousePos()
-        return UserInputService:GetMouseLocation()
-    end
+-- Helper: mouse position
+local function getMousePos()
+    return UserInputService:GetMouseLocation()
+end
 
-    local function getPredictedPosition(part, projSpeed)
-        if not part then return nil end
-        if projSpeed and projSpeed > 0 then
-            local dir = part.Position - Camera.CFrame.Position
-            local dist = dir.Magnitude
-            if projSpeed <= 0 then return part.Position end
-            local travel = dist / projSpeed
-            local vel = Vector3.new(0,0,0)
-            local root = part.Parent and part.Parent:FindFirstChild("HumanoidRootPart")
-            if root and root:IsA("BasePart") then
-                vel = root.AssemblyLinearVelocity
-            end
-            return part.Position + vel * travel
-        else
-            return part.Position
-        end
-    end
+-- Helper: find closest player in FOV
+local function getClosestTarget()
+    local mousePos = getMousePos()
+    local best, bestDist = nil, math.huge
 
-    local function getClosestTarget()
-        local center = mousePos()
-        local best = nil
-        local bestDist = math.huge
-        for _, pl in ipairs(Players:GetPlayers()) do
-            if pl ~= Players.LocalPlayer and pl.Character and pl.Character:FindFirstChild(Aimbot_TargetPart) and pl.Character:FindFirstChild("Humanoid") then
-                local hum = pl.Character:FindFirstChild("Humanoid")
-                if hum and hum.Health > 0 then
-                    local part = pl.Character:FindFirstChild(Aimbot_TargetPart)
-                    if part then
-                        local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                        if onScreen then
-                            local screenVec = Vector2.new(screenPos.X, screenPos.Y)
-                            local dist = (screenVec - center).Magnitude
-                            if dist <= Aimbot_FOV and dist < bestDist then
-                                bestDist = dist
-                                best = pl
-                            end
-                        end
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer and pl.Character and pl.Character:FindFirstChild(TargetPart) and pl.Character:FindFirstChild("Humanoid") then
+            if pl.Character.Humanoid.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(pl.Character[TargetPart].Position)
+                if onScreen then
+                    local screenVec = Vector2.new(screenPos.X, screenPos.Y)
+                    local dist = (screenVec - mousePos).Magnitude
+                    if dist <= FOV_Radius and dist < bestDist then
+                        bestDist = dist
+                        best = pl
                     end
                 end
             end
         end
-        return best
     end
 
-    local function aimAt(worldPos, smooth)
-        if not worldPos then return end
-        local camPos = Camera.CFrame.Position
-        local dir = (worldPos - camPos)
-        if dir.Magnitude == 0 then return end
-        local goal = CFrame.new(camPos, camPos + dir.Unit)
-        Camera.CFrame = Camera.CFrame:Lerp(goal, math.clamp(smooth, 0, 1))
+    return best
+end
+
+-- Helper: aim at target (smooth)
+local function aimAt(target)
+    if not target then return end
+    local part = target.Character and target.Character:FindFirstChild(TargetPart)
+    if not part then return end
+    local dir = (part.Position - Camera.CFrame.Position).Unit
+    local cf = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + dir)
+    Camera.CFrame = Camera.CFrame:Lerp(cf, Aimbot_Smooth)
+end
+
+-- RenderStepped
+RunService.RenderStepped:Connect(function()
+    if not Aimbot_Enabled then
+        fovCircle.Visible = false
+        return
     end
 
-    -- rainbow hue
-    local hue = 0
+    -- Update rainbow color
+    updateRainbowColor()
 
-    RunService.RenderStepped:Connect(function(dt)
-        -- update hue
-        hue = (hue + dt * Rainbow_HueSpeed) % 1
-        local color = Color3.fromHSV(hue, 1, 1)
+    -- FOV circle at mouse
+    local mouse = getMousePos()
+    fovCircle.Position = mouse
+    fovCircle.Visible = true
 
-        -- update FOV circle if exists
-        if fovCircle then
-            fovCircle.Position = mousePos()
-            fovCircle.Radius = Aimbot_FOV
-            fovCircle.Color = color
-            fovCircle.Visible = Aimbot_Enabled and Aimbot_ShowFOV
-        end
+    -- Aim
+    local target = getClosestTarget()
+    aimAt(target)
+end)
 
-        if tracerLine then
-            tracerLine.Visible = false
-        end
-
-        if not Aimbot_Enabled then return end
-
-        if Aimbot_HoldToAim then
-            if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-                return
-            end
-        end
-
-        local targetPlayer = getClosestTarget()
-        if not targetPlayer then return end
-        local targetPart = targetPlayer.Character and targetPlayer.Character:FindFirstChild(Aimbot_TargetPart)
-        if not targetPart then return end
-
-        local aimPos = getPredictedPosition(targetPart, Aimbot_ProjectileSpeed)
-        if aimPos then
-            aimAt(aimPos, Aimbot_Smoothness)
-        end
-
-        -- tracer
-        if tracerLine and targetPart then
-            local tPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-            if onScreen then
-                local screenFrom = mousePos()
-                tracerLine.From = Vector2.new(screenFrom.X, screenFrom.Y)
-                tracerLine.To = Vector2.new(tPos.X, tPos.Y)
-                tracerLine.Color = color
-                tracerLine.Visible = true
-            end
-        end
-    end)
-
-    -- WindUI controls
-    Tab_Aimbot:Toggle({
-        Title = "Aimbot (Nearest Head)",
-        Desc = "ล็อกหัวผู้เล่นที่ใกล้สุด (client-side camera only)",
-        Icon = "target",
-        Value = false,
-        Callback = function(state)
-            Aimbot_Enabled = state
-            if fovCircle then fovCircle.Visible = state and Aimbot_ShowFOV end
-            if tracerLine then tracerLine.Visible = state end
-        end
-    })
-
-    Tab_Aimbot:Toggle({
-        Title = "Show FOV",
-        Desc = "แสดงวง FOV รอบเมาส์",
-        Icon = "circle",
-        Value = true,
-        Callback = function(state)
-            Aimbot_ShowFOV = state
-            if fovCircle then fovCircle.Visible = state and Aimbot_Enabled end
-        end
-    })
-
-    Tab_Aimbot:Slider({
-        Title = "FOV Size",
-        Desc = "ขนาดวง FOV (พิกเซล)",
-        Step = 5,
-        Value = {Min = 30, Max = 800, Default = Aimbot_FOV},
-        Callback = function(value)
-            Aimbot_FOV = value
-            if fovCircle then fovCircle.Radius = value end
-        end
-    })
-
-    Tab_Aimbot:Slider({
-        Title = "Smoothness",
-        Desc = "ค่าความนุ่มของการหมุนกล้อง (0.01..1.0)",
-        Step = 0.01,
-        Value = {Min = 0.01, Max = 1.0, Default = Aimbot_Smoothness},
-        Callback = function(value)
-            Aimbot_Smoothness = value
-        end
-    })
-
-    Tab_Aimbot:Toggle({
-        Title = "Hold to Aim (RMB)",
-        Desc = "ถ้าเปิด ต้องกดขวาค้างเพื่อให้ aimbot ทำงาน",
-        Icon = "mouse-pointer",
-        Value = false,
-        Callback = function(state)
-            Aimbot_HoldToAim = state
-        end
-    })
-
-    Tab_Aimbot:Dropdown({
-        Title = "Target Part",
-        Desc = "เลือกส่วนที่จะล็อก",
-        Options = {"Head", "HumanoidRootPart"},
-        Default = Aimbot_TargetPart,
-        Callback = function(choice)
-            Aimbot_TargetPart = choice
-        end
-    })
-
-    Tab_Aimbot:Slider({
-        Title = "Projectile Speed",
-        Desc = "ปรับค่าสำหรับการพยากรณ์ (studs/sec). ตั้ง 0 เพื่อปิด prediction",
-        Step = 10,
-        Value = {Min = 0, Max = 5000, Default = Aimbot_ProjectileSpeed},
-        Callback = function(value)
-            Aimbot_ProjectileSpeed = value
-        end
-    })
-
-    Tab_Aimbot:Slider({
-        Title = "Rainbow Hue Speed",
-        Desc = "ความเร็วการไล่สีรุ้ง (ยิ่งมากยิ่งเร็ว)",
-        Step = 0.05,
-        Value = {Min = 0.05, Max = 5, Default = Rainbow_HueSpeed},
-        Callback = function(value)
-            Rainbow_HueSpeed = value
-        end
-    })
-end -- end Aimbot block
+-- WindUI Toggle
+Tab_Aimbot:Toggle({
+    Title = "Aimbot (Head Lock + Rainbow FOV)",
+    Desc = "เปิด/ปิดล็อคหัวผู้เล่นและแสดงวง FOV สีรุ้ง",
+    Icon = "target",
+    Value = false,
+    Callback = function(state)
+        Aimbot_Enabled = state
+        fovCircle.Visible = state
+        print("Aimbot (Head Lock):", state and "ON" or "OFF")
+    end
+})
 
 -- =========================
 -- ESP: Box (orange), Name (small), HP Bar, Highlight - Tab_ESP
