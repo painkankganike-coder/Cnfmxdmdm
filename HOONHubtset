@@ -1,0 +1,549 @@
+-- ✅ โหลด WindUI
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "HOON Hub",
+    Icon = "gun",
+    Author = "by As4r",
+    Folder = "HOON Hub",
+    Theme = "Dark",
+})
+
+Window:EditOpenButton({
+    Title = "HOON Hub | test",
+    Icon = "food",
+    Color = ColorSequence.new(
+        Color3.fromHex("FF0F7B"),
+        Color3.fromHex("F89B29")
+    ),
+})
+
+--------------------------------------------------------
+-- 🟢 Aimbot Tab
+--------------------------------------------------------
+local Tab_Aimbot = Window:Tab({
+    Title = "Aimbot",
+    Icon = "crosshair",
+})
+
+
+
+--------------------------------------------------------
+-- 🔴 ESP Tab
+--------------------------------------------------------
+local Tab_ESP = Window:Tab({
+    Title = "ESP",
+    Icon = "eye",
+})
+
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+------------------------------
+-- 🟧 ESP Box 2D
+------------------------------
+local ESP_Box_Enabled = false
+local ESP_Box_Objects = {}
+
+local function CreateESPBox(player)
+    if player == LocalPlayer then return end
+    if ESP_Box_Objects[player] then return end
+
+    local box = Drawing.new("Square")
+    box.Color = Color3.fromRGB(255, 140, 0)
+    box.Thickness = 1.5
+    box.Filled = false
+    box.Visible = false
+
+    ESP_Box_Objects[player] = {Box = box}
+end
+
+local function RemoveESPBox(player)
+    if ESP_Box_Objects[player] then
+        for _, obj in pairs(ESP_Box_Objects[player]) do
+            obj:Remove()
+        end
+        ESP_Box_Objects[player] = nil
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not ESP_Box_Enabled then
+        for _, esp in pairs(ESP_Box_Objects) do
+            esp.Box.Visible = false
+        end
+        return
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local pos, visible = Camera:WorldToViewportPoint(root.Position)
+            local esp = ESP_Box_Objects[player] or CreateESPBox(player) or ESP_Box_Objects[player]
+
+            if visible and esp then
+                local height = 2000 / pos.Z
+                local width = height / 1.5
+                esp.Box.Size = Vector2.new(width, height)
+                esp.Box.Position = Vector2.new(pos.X - width/2, pos.Y - height/2)
+                esp.Box.Visible = true
+            elseif esp then
+                esp.Box.Visible = false
+            end
+        end
+    end
+end)
+
+Tab_ESP:Toggle({
+    Title = "Box ",
+    Desc = "แสดงกล่องรอบผู้เล่น",
+    Icon = "square",
+    Value = false,
+    Callback = function(state)
+        ESP_Box_Enabled = state
+        if state then
+            for _, player in pairs(Players:GetPlayers()) do
+                CreateESPBox(player)
+            end
+            Players.PlayerAdded:Connect(CreateESPBox)
+            Players.PlayerRemoving:Connect(RemoveESPBox)
+        end
+    end
+})
+
+------------------------------
+-- 🟦 ESP Name
+------------------------------
+local ESP_Name_Enabled = false
+local ESP_Name_Objects = {}
+
+local function CreateNameTag(player)
+    if player == LocalPlayer then return end
+    if ESP_Name_Objects[player] then return end
+
+    local nameText = Drawing.new("Text")
+    nameText.Size = 13
+    nameText.Color = Color3.fromRGB(255, 255, 255)
+    nameText.Center = true
+    nameText.Outline = true
+    nameText.Visible = false
+    nameText.Font = 2
+
+    ESP_Name_Objects[player] = {Name = nameText}
+end
+
+local function RemoveNameTag(player)
+    if ESP_Name_Objects[player] then
+        for _, obj in pairs(ESP_Name_Objects[player]) do
+            obj:Remove()
+        end
+        ESP_Name_Objects[player] = nil
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not ESP_Name_Enabled then
+        for _, esp in pairs(ESP_Name_Objects) do
+            esp.Name.Visible = false
+        end
+        return
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local pos, visible = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
+            local esp = ESP_Name_Objects[player] or CreateNameTag(player) or ESP_Name_Objects[player]
+
+            if visible and esp then
+                local distance = (LocalPlayer.Character.HumanoidRootPart.Position - head.Position).Magnitude
+                local size = math.clamp(13 - (distance/150), 10, 13)
+
+                esp.Name.Text = player.Name
+                esp.Name.Size = size
+                esp.Name.Position = Vector2.new(pos.X, pos.Y - 20)
+                esp.Name.Visible = true
+            elseif esp then
+                esp.Name.Visible = false
+            end
+        end
+    end
+end)
+
+Tab_ESP:Toggle({
+    Title = "Name",
+    Desc = "แสดงชื่อผู้เล่น",
+    Icon = "user",
+    Value = false,
+    Callback = function(state)
+        ESP_Name_Enabled = state
+        if state then
+            for _, player in pairs(Players:GetPlayers()) do
+                CreateNameTag(player)
+            end
+            Players.PlayerAdded:Connect(CreateNameTag)
+            Players.PlayerRemoving:Connect(RemoveNameTag)
+        end
+    end
+})
+--------------------------------------------------------
+-- 🟠 Highlight ESP (สีส้ม)
+--------------------------------------------------------
+Tab_ESP:Button({
+    Title = " Highlight",
+    Desc = "Highlight ผู้เล่นทุกคนเป็นสี",
+    Callback = function()
+        local function CreateESP(player)
+            if player.Character and player.Character:FindFirstChild("Head") then
+                if player.Character:FindFirstChild("ESPHighlight") then
+                    player.Character.ESPHighlight:Destroy()
+                end
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "ESPHighlight"
+                highlight.FillColor = Color3.fromRGB(255, 128, 0)
+                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                highlight.FillTransparency = 0.5
+                highlight.Parent = player.Character
+            end
+        end
+
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                CreateESP(player)
+            end
+        end
+
+        Players.PlayerAdded:Connect(function(player)
+            player.CharacterAdded:Connect(function()
+                task.wait(1)
+                CreateESP(player)
+            end)
+        end)
+    end
+})
+
+--------------------------------------------------------
+-- 🩸 ESP HP BAR (แยกเปิดปิด)
+--------------------------------------------------------
+
+local ESP_HP_Enabled = false
+local ESP_HP_Objects = {}
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- 🧩 ฟังก์ชันสร้าง HP Bar
+local function CreateHPBar(player)
+    if player == LocalPlayer then return end
+    if ESP_HP_Objects[player] then return end
+
+    local hpBar = Drawing.new("Line")
+    hpBar.Thickness = 3
+    hpBar.Color = Color3.fromRGB(0, 255, 0)
+    hpBar.Visible = false
+
+    ESP_HP_Objects[player] = {HP = hpBar}
+end
+
+local function RemoveHPBar(player)
+    if ESP_HP_Objects[player] then
+        for _, obj in pairs(ESP_HP_Objects[player]) do
+            obj:Remove()
+        end
+        ESP_HP_Objects[player] = nil
+    end
+end
+
+-- 🔁 อัปเดต HP ทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if not ESP_HP_Enabled then
+        for _, esp in pairs(ESP_HP_Objects) do
+            esp.HP.Visible = false
+        end
+        return
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") then
+            local root = player.Character.HumanoidRootPart
+            local humanoid = player.Character.Humanoid
+            local pos, visible = Camera:WorldToViewportPoint(root.Position)
+
+            if visible then
+                local height = 2000 / pos.Z
+                local width = height / 1.5
+                local x = pos.X - width / 2
+                local y = pos.Y - height / 2
+
+                local esp = ESP_HP_Objects[player]
+                if esp then
+                    local hpPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                    local barStart = Vector2.new(x - 6, y + height)
+                    local barEnd = Vector2.new(x - 6, y + height - (height * hpPercent))
+
+                    esp.HP.Visible = true
+                    esp.HP.From = barStart
+                    esp.HP.To = barEnd
+                    esp.HP.Color = Color3.fromRGB(
+                        255 - (hpPercent * 255),
+                        hpPercent * 255,
+                        0
+                    )
+                else
+                    CreateHPBar(player)
+                end
+            else
+                if ESP_HP_Objects[player] then
+                    ESP_HP_Objects[player].HP.Visible = false
+                end
+            end
+        end
+    end
+end)
+
+-- ⚙️ ฟังก์ชันเปิด/ปิด
+local function EnableESP_HP()
+    ESP_HP_Enabled = true
+    print("✅ เปิด ESP HP Bar แล้ว")
+    for _, player in pairs(Players:GetPlayers()) do
+        CreateHPBar(player)
+    end
+    Players.PlayerAdded:Connect(CreateHPBar)
+    Players.PlayerRemoving:Connect(RemoveHPBar)
+end
+
+local function DisableESP_HP()
+    ESP_HP_Enabled = false
+    print("❌ ปิด ESP HP Bar แล้ว")
+    for _, player in pairs(Players:GetPlayers()) do
+        RemoveHPBar(player)
+    end
+end
+
+--------------------------------------------------------
+-- 🕹️ เพิ่มปุ่มใน WindUI
+--------------------------------------------------------
+Tab_ESP:Toggle({
+    Title = "HP Bar",
+    Desc = "แสดงแถบเลือด",
+    Icon = "activity",
+    Value = false,
+    Callback = function(state)
+        if state then
+            EnableESP_HP()
+        else
+            DisableESP_HP()
+        end
+    end
+})
+
+--------------------------------------------------------
+-- 🧍 Character Tab (WalkSpeed + Slider)
+--------------------------------------------------------
+local Tab_Character = Window:Tab({
+    Title = "Character",
+    Icon = "user",
+})
+
+local SpeedEnabled = false
+local DefaultSpeed = 16
+local CustomSpeed = 50
+
+Tab_Character:Toggle({
+    Title = "Walk Speed",
+    Desc = "เปิด/ปิดความเร็วเดิน",
+    Icon = "zap",
+    Value = false,
+    Callback = function(state)
+        SpeedEnabled = state
+        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            if state then
+                humanoid.WalkSpeed = CustomSpeed
+                print("✅ เปิดโหมด Speed (" .. CustomSpeed .. ")")
+            else
+                humanoid.WalkSpeed = DefaultSpeed
+                print("❌ ปิดโหมด Speed กลับเป็นปกติ")
+            end
+        end
+    end
+})
+
+Tab_Character:Slider({
+    Title = "Speed Value",
+    Desc = "ปรับระดับความเร็วการเดิน",
+    Step = 1,
+    Value = {
+        Min = 16,
+        Max = 35,
+        Default = 16,
+    },
+    Callback = function(value)
+        CustomSpeed = value
+        if SpeedEnabled then
+            local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = value
+            end
+        end
+        print("🎚️ ความเร็วถูกตั้งค่าเป็น:", value)
+    end
+})
+
+--------------------------------------------------------
+-- 🦘 Super Jump (Fixed inside function)
+--------------------------------------------------------
+
+local SuperJump_Enabled = false
+
+-- ⚙️ ฟังก์ชันกระโดดสูง (แก้ค่าตรงนี้ได้เลย)
+local function EnableSuperJump()
+	SuperJump_Enabled = true
+	local char = game.Players.LocalPlayer.Character
+	if char and char:FindFirstChildOfClass("Humanoid") then
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		humanoid.UseJumpPower = true
+		humanoid.JumpPower = 90 -- 🔥 
+		print("✅ เปิด Super Jump (JumpPower: 90)")
+	end
+end
+
+local function DisableSuperJump()
+	SuperJump_Enabled = false
+	local char = game.Players.LocalPlayer.Character
+	if char and char:FindFirstChildOfClass("Humanoid") then
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		humanoid.UseJumpPower = true
+		humanoid.JumpPower = 50 -- กลับค่าปกติ
+		print("❌ ปิด Super Jump (กลับปกติ)")
+	end
+end
+
+--------------------------------------------------------
+-- ⚙️ ปุ่ม Toggle ใน WindUI
+--------------------------------------------------------
+Tab_Character:Toggle({
+	Title = "Super Jump",
+	Desc = "โหมดกระโดดสูง",
+	Icon = "arrow-up",
+	Value = false,
+	Callback = function(state)
+		if state then
+			EnableSuperJump()
+		else
+			DisableSuperJump()
+		end
+	end
+})
+
+--------------------------------------------------------
+-- 🔁 ให้กลับมาทำงานอัตโนมัติหลังเกิดใหม่
+--------------------------------------------------------
+game.Players.LocalPlayer.CharacterAdded:Connect(function()
+	task.wait(1)
+	if SuperJump_Enabled then
+		EnableSuperJump()
+	end
+end)
+
+--------------------------------------------------------
+-- 🧍 Character Tab (WalkSpeed + Snap)
+--------------------------------------------------------
+local Tab_Character = Window:Tab({
+    Title = "Character",
+    Icon = "user",
+})
+
+-- 🏃 WalkSpeed
+local SpeedEnabled = false
+local DefaultSpeed = 16
+local CustomSpeed = 50
+
+Tab_Character:Toggle({
+    Title = "Walk Speed",
+    Desc = "เปิด/ปิดความเร็วเดิน",
+    Icon = "zap",
+    Value = false,
+    Callback = function(state)
+        SpeedEnabled = state
+        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            if state then
+                humanoid.WalkSpeed = CustomSpeed
+                print("✅ เปิดโหมด Speed (" .. CustomSpeed .. ")")
+            else
+                humanoid.WalkSpeed = DefaultSpeed
+                print("❌ ปิดโหมด Speed กลับเป็นปกติ")
+            end
+        end
+    end
+})
+
+Tab_Character:Slider({
+    Title = "Speed Value",
+    Desc = "ปรับระดับความเร็วการเดิน",
+    Step = 1,
+    Value = {
+        Min = 16,
+        Max = 50,
+        Default = CustomSpeed,
+    },
+    Callback = function(value)
+        CustomSpeed = value
+        if SpeedEnabled then
+            local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = value
+            end
+        end
+    end
+})
+
+--------------------------------------------------------
+-- 🕳️ Snap / มุดดิน (ปรับความลึกได้)
+--------------------------------------------------------
+local SnapEnabled = false
+local SnapDepth = -10 -- ค่าเริ่มต้น
+local RunService = game:GetService("RunService")
+local LocalPlayer = game:GetService("Players").LocalPlayer
+
+local function UpdateSnap()
+    if not SnapEnabled then return end
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local root = char.HumanoidRootPart
+        root.CFrame = CFrame.new(root.Position.X, root.Position.Y + SnapDepth, root.Position.Z)
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if SnapEnabled then
+        UpdateSnap()
+    end
+end)
+
+-- Toggle Snap ใน Tab_Character
+Tab_Character:Toggle({
+    Title = "Snap ",
+    Desc = "เปิดเพื่อมุดดิน",
+    Value = false,
+    Callback = function(state)
+        SnapEnabled = state
+        print("Snap:", state and "ON" or "OFF")
+    end
+})
+
+-- Slider ปรับความลึกแบบเรียลไทม์
+Tab_Character:Slider({
+    Title = "Slider",
+    Desc = "ปรับความลึกของSnap ",
+    Step = 1,
+    Value = {Min = -50, Max = 0, Default = SnapDepth},
+    Callback = function(value)
+        SnapDepth = value
+        print("Snap Depth:", SnapDepth)
+    end
+})
