@@ -1,0 +1,202 @@
+-- ==================== LOAD WindUI ====================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "Hoon Hub",
+    Icon = "door-open",
+    Author = "by As4r",
+    Folder = "HoonHub",
+    Size = UDim2.fromOffset(580, 460),
+    MinSize = Vector2.new(560, 350),
+    MaxSize = Vector2.new(850, 560),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true
+})
+
+Window:EditOpenButton({
+    Title = "Hoon Hub | Free",
+    Icon = "monitor",
+    CornerRadius = UDim.new(0,5),
+    StrokeThickness = 2,
+    Color = ColorSequence.new(Color3.fromHex("FF0F7B"), Color3.fromHex("F89B29")),
+    OnlyMobile = false,
+    Enabled = true,
+    Draggable = true
+})
+
+-- ==================== TABS ====================
+local Tab_combat = Window:Tab({Title = "Combat", Icon = "gun", Locked = false})
+local Tab_main   = Window:Tab({Title = "Main", Icon = "menu", Locked = false})
+
+-- ==================== SERVICES ====================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+repeat task.wait() until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+repeat task.wait() until Workspace.CurrentCamera
+local Camera = Workspace.CurrentCamera
+
+local Send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
+
+-- ==================== SETTINGS ====================
+local FOV_RADIUS = 150
+local SilentAimEnabled = false
+local SHOW_FOV = true
+local CurrentTarget = nil
+local hue = 0
+
+local SUPPORTED_GUNS = {
+    "P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9",
+    "Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"
+}
+
+-- ==================== DRAWINGS ====================
+local fovCircle
+local lockLine
+
+local function createDrawings()
+    if not fovCircle then
+        fovCircle = Drawing.new("Circle")
+        fovCircle.Radius = FOV_RADIUS
+        fovCircle.Color = Color3.fromRGB(255,255,255)
+        fovCircle.Thickness = 2
+        fovCircle.Filled = false
+        fovCircle.Transparency = 1
+        fovCircle.Visible = SHOW_FOV
+    end
+
+    if not lockLine then
+        lockLine = Drawing.new("Line")
+        lockLine.Thickness = 2
+        lockLine.Transparency = 1
+        lockLine.Visible = false
+    end
+end
+
+createDrawings()
+
+-- ==================== FUNCTIONS ====================
+local function rainbowColor(t)
+    return Color3.fromHSV((t % 1), 1, 1)
+end
+
+local function IsInFOV(worldPos)
+    local screenPos, onScreen = Camera:WorldToViewportPoint(worldPos)
+    if not onScreen then return false end
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    return (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude <= FOV_RADIUS
+end
+
+local function GetClosestInFOV()
+    local closest = nil
+    local closestDist = math.huge
+    local myHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+    if not myHead then return nil end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            if IsInFOV(head.Position) then
+                local dist = (head.Position - myHead.Position).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    closest = player
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function IsSupportedGun(gun)
+    if not gun then return false end
+    local name = typeof(gun) == "Instance" and gun.Name or tostring(gun)
+    return table.find(SUPPORTED_GUNS, name) ~= nil
+end
+
+-- ==================== HOOK FIRESERVER ====================
+local oldFire
+oldFire = hookfunction(Send.FireServer, function(self, ...)
+    local args = {...}
+    if SilentAimEnabled and #args >= 5 and args[2] == "shoot_gun" then
+        if IsSupportedGun(args[3]) and CurrentTarget and CurrentTarget.Character then
+            local targetHead = CurrentTarget.Character:FindFirstChild("Head")
+            local myHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+            if targetHead and myHead then
+                local aimPos = targetHead.Position
+                args[4] = CFrame.new(myHead.Position, aimPos)
+                args[5] = {{{Normal=(aimPos-myHead.Position).Unit,Instance=targetHead,Position=aimPos}}}
+            end
+        end
+    end
+    return oldFire(self, unpack(args))
+end)
+
+-- ==================== UPDATE LOOPS ====================
+RunService.Heartbeat:Connect(function()
+    if SilentAimEnabled then
+        CurrentTarget = GetClosestInFOV()
+    else
+        CurrentTarget = nil
+    end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+    hue = (hue + dt*0.5)%1
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+    -- วง FOV ตรงกลางจอ
+    if fovCircle then
+        fovCircle.Position = center
+        fovCircle.Visible = SHOW_FOV
+    end
+
+    -- เส้น Lock Line สีรุ้ง
+    if lockLine then
+        if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild("Head") then
+            local head = CurrentTarget.Character.Head
+            local screenHead, onScreen = Camera:WorldToViewportPoint(head.Position)
+            if onScreen then
+                lockLine.From = center
+                lockLine.To = Vector2.new(screenHead.X, screenHead.Y)
+                lockLine.Color = rainbowColor(hue)
+                lockLine.Visible = true
+            else
+                lockLine.Visible = false
+            end
+        else
+            lockLine.Visible = false
+        end
+    end
+end)
+
+-- ==================== UI TOGGLES ====================
+-- Combat Tab
+Tab_combat:Toggle({
+    Title = "🎯 Silent Aim",
+    Desc = "เปิด/ปิด Silent Aim",
+    Icon = "crosshair",
+    Value = false,
+    Callback = function(v)
+        SilentAimEnabled = v
+        print("Silent Aim:", v)
+    end
+})
+
+Tab_combat:Toggle({
+    Title = "⭕ Show FOV",
+    Desc = "แสดงวง FOV สีขาว",
+    Icon = "circle",
+    Value = true,
+    Callback = function(v)
+        SHOW_FOV = v
+        if fovCircle then fovCircle.Visible = v end
+        print("Show FOV:", v)
+    end
+})
+
+-- Main Tab (สามารถเพิ่ม Speed/Jump/อื่นๆที่นี่)
