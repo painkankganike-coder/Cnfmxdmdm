@@ -1,0 +1,259 @@
+-- Horun Hub แยก Toggle อิสระ + Combat / Visuals / Main
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "🧑‍💻Horun Hub | Pain⚡",
+    Icon = "swords",
+    Author = "by Horun",
+    Folder = "MyHorun",
+    Size = UDim2.fromOffset(580, 460),
+    MinSize = Vector2.new(560, 350),
+    MaxSize = Vector2.new(850, 560),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true,
+    SideBarWidth = 200
+})
+
+Window:EditOpenButton({
+    Title = "Horun Hub",
+    Icon = "zap",
+    CornerRadius = UDim.new(0,5),
+    StrokeThickness = 2,
+    Color = ColorSequence.new(Color3.fromHex("F89B29"), Color3.fromHex("F89B29")),
+    OnlyMobile = false,
+    Enabled = true,
+    Draggable = true
+})
+
+local CombatTab = Window:Tab({ Title = "Combat", Icon = "crosshair" })
+local VisualsTab = Window:Tab({ Title = "Visuals", Icon = "eye" })
+local MainTab = Window:Tab({ Title = "Main", Icon = "home" })
+local UITab = Window:Tab({ Title = "UI", Icon = "layout-dashboard" })
+
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ================== Combat: Silent Aim ==================
+local SilentAimEnabled = false
+local FOV = 150
+local CurrentTarget
+local head, aimPos
+
+local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
+local GunLookup = {}
+for _, name in pairs(GunNames) do GunLookup[name] = true end
+
+local fovCircle = Drawing.new("Circle")
+fovCircle.Color = Color3.new(1,1,1)
+fovCircle.Thickness = 2
+fovCircle.NumSides = 100
+fovCircle.Radius = FOV
+fovCircle.Filled = false
+fovCircle.Visible = true
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+local tracerLine = Drawing.new("Line")
+tracerLine.Color = Color3.new(1,0,0)
+tracerLine.Thickness = 2
+tracerLine.Visible = false
+
+local function GetClosestTarget()
+    local closest
+    local shortest = math.huge
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local screenPos, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                if dist < FOV and dist < shortest then
+                    shortest = dist
+                    closest = player
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function IsHoldingAllowedGun()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    for _, child in pairs(char:GetChildren()) do
+        if (child:IsA("Tool") or child:IsA("Model")) and GunLookup[child.Name] then
+            return true
+        end
+    end
+    return false
+end
+
+local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
+local oldFire
+oldFire = hookfunction(send.FireServer, function(self, ...)
+    local args = {...}
+    if SilentAimEnabled and IsHoldingAllowedGun() then
+        CurrentTarget = GetClosestTarget()
+        if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild("Head") then
+            head = CurrentTarget.Character.Head
+            aimPos = head.Position
+            args[4] = CFrame.new(1/0,1/0,1/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0)
+            args[5] = {[1]={[1]={["Instance"]=head,["Position"]=aimPos}}}
+        end
+    end
+    return oldFire(self, unpack(args))
+end)
+
+RunService.RenderStepped:Connect(function()
+    fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    fovCircle.Radius = FOV
+
+    if SilentAimEnabled then
+        fovCircle.Visible = true
+        local target = GetClosestTarget()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            local headPos = target.Character.Head.Position
+            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+            local ourHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+            if onScreen and ourHead then
+                local screenStart, startOn = Camera:WorldToViewportPoint(ourHead.Position)
+                if startOn then
+                    tracerLine.From = Vector2.new(screenStart.X, screenStart.Y)
+                    tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
+                    tracerLine.Color = Color3.fromHSV(tick()%5/5,1,1)
+                    tracerLine.Visible = true
+                else
+                    tracerLine.Visible = false
+                end
+            else
+                tracerLine.Visible = false
+            end
+        else
+            tracerLine.Visible = false
+        end
+    else
+        fovCircle.Visible = false
+        tracerLine.Visible = false
+    end
+end)
+
+CombatTab:Toggle({
+    Title = "Silent Aim",
+    Icon = "target",
+    Value = false,
+    Callback = function(v)
+        SilentAimEnabled = v
+        fovCircle.Visible = v
+        tracerLine.Visible = v
+    end
+})
+
+-- ================== ESP Player ==================
+local ESP_Box, ESP_Name, ESP_Health, ESP_Highlight = false,false,false,false
+local ESPData = {}
+
+local function CreateESPForPlayer(player)
+    if player == LocalPlayer then return end
+    local box = Drawing.new("Square")
+    box.Thickness = 1; box.Filled = false; box.Color = Color3.fromRGB(255,0,0); box.Visible=false
+    local nameTxt = Drawing.new("Text")
+    nameTxt.Size = 10; nameTxt.Center=true; nameTxt.Outline=true; nameTxt.Color=Color3.fromRGB(255,255,255); nameTxt.Visible=false
+    local hpLine = Drawing.new("Line")
+    hpLine.Thickness=1; hpLine.Color=Color3.fromRGB(0,255,0); hpLine.Visible=false
+    ESPData[player] = {Box=box, Name=nameTxt, Health=hpLine, Highlight=nil}
+end
+
+for _, p in ipairs(Players:GetPlayers()) do CreateESPForPlayer(p) end
+Players.PlayerAdded:Connect(CreateESPForPlayer)
+
+local function EnsureHighlight(player)
+    if player == LocalPlayer then return end
+    local data = ESPData[player]; if not data then return end
+    if not data.Highlight and player.Character then
+        local h = Instance.new("Highlight")
+        h.Name="HorunHighlight"
+        h.Adornee=player.Character
+        h.FillColor=Color3.fromRGB(255,160,0)
+        h.OutlineColor=Color3.fromRGB(255,220,0)
+        h.FillTransparency=0.1
+        h.OutlineTransparency=0
+        h.Enabled=ESP_Highlight
+        h.Parent=player.Character
+        data.Highlight=h
+    elseif data.Highlight and player.Character then
+        data.Highlight.Adornee=player.Character
+        data.Highlight.Enabled=ESP_Highlight
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    for player,data in pairs(ESPData) do
+        local char = player.Character
+        if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+            local hrp=char.HumanoidRootPart
+            local humanoid=char.Humanoid
+            local pos,onScreen=Camera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                local dist=(Camera.CFrame.Position-hrp.Position).Magnitude
+                local scale=math.clamp(1/dist*120,0.06,0.9)
+                local boxW,boxH=18*scale,34*scale
+                local boxPos=Vector2.new(pos.X-boxW/2,pos.Y-boxH/2)
+                data.Box.Size=Vector2.new(boxW,boxH)
+                data.Box.Position=boxPos
+                data.Box.Visible=ESP_Box
+
+                data.Name.Text=player.Name
+
+data.Name.Position=Vector2.new(pos.X, boxPos.Y-8)
+                data.Name.Visible=ESP_Name
+
+                local hp=humanoid.Health/humanoid.MaxHealth
+                data.Health.From=Vector2.new(boxPos.X-4, boxPos.Y+boxH)
+                data.Health.To=Vector2.new(boxPos.X-4, boxPos.Y+boxH*(1-hp))
+                data.Health.Visible=ESP_Health
+
+                if ESP_Highlight then EnsureHighlight(player) end
+            else
+                data.Box.Visible=false
+                data.Name.Visible=false
+                data.Health.Visible=false
+            end
+        end
+    end
+end)
+
+VisualsTab:Toggle({ Title="ESP Box", Icon="box", Value=false, Callback=function(v) ESP_Box=v end })
+VisualsTab:Toggle({ Title="ESP Name", Icon="user", Value=false, Callback=function(v) ESP_Name=v end })
+VisualsTab:Toggle({ Title="ESP Health", Icon="heart", Value=false, Callback=function(v) ESP_Health=v end })
+VisualsTab:Toggle({ Title="Highlight", Icon="star", Value=false, Callback=function(v) ESP_Highlight=v end })
+
+-- ================== Main: Ground Warp / มุดดิน ==================
+MainTab:Button({
+    Title = "Ground Warp (-7)",
+    Icon = "arrow-down",
+    Callback = function()
+        local LP = LocalPlayer
+        local Char = LP.Character or LP.CharacterAdded:Wait()
+        local HRP = Char:WaitForChild("HumanoidRootPart")
+        if not HRP then return end
+        local startY = HRP.Position.Y
+        local targetY = startY - 7
+        local duration = 1 -- 1 วินาที
+        local t = 0
+        local connection
+        connection = RunService.RenderStepped:Connect(function(dt)
+            t = t + dt
+            HRP.CFrame = CFrame.new(HRP.Position.X, startY + (targetY - startY) * math.clamp(t/duration,0,1), HRP.Position.Z)
+            if t >= duration then
+                connection:Disconnect()
+            end
+        end)
+    end
+})
+
+-- ================== UI Toggle ==================
+UITab:Button({ Title="Toggle Hub", Icon="eye-off", Callback=function() Window:Toggle() end })
