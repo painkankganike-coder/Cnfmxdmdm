@@ -1,0 +1,716 @@
+-- โหลด WindUI
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+-- 🪟 หน้าต่างหลัก
+local Window = WindUI:CreateWindow({
+    Title = "XIUCO HUB | v1.0 | paid🥷",
+    Icon = "zap",
+    Author = "by XIUCO 👑",
+    Folder = "MyxlohugHub",
+    Size = UDim2.fromOffset(400, 500),
+    MinSize = Vector2.new(300, 400),
+    MaxSize = Vector2.new(500, 500),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true,
+    SideBarWidth = 150,
+    BackgroundImageTransparency = 0.42,
+    HideSearchBar = true,
+    ScrollBarEnabled = false,
+})
+
+Window:EditOpenButton({
+    Title = "XIUCO HUB | TEST",
+    Icon = "zap",
+    CornerRadius = UDim.new(0, 5),
+    StrokeThickness = 2,
+    Color = ColorSequence.new(Color3.fromHex("FF2B00"), Color3.fromHex("000000")),
+    OnlyMobile = false,
+    Enabled = true,
+    Draggable = true,
+})
+
+------------------------------------------------------
+-- ⚔️ COMBAT Tab
+------------------------------------------------------
+local CombatTab = Window:Tab({
+    Title = "COMBAT",
+    Icon = "sword",
+    Locked = false,
+})
+
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Variables
+local SilentAimEnabled = true
+local FOV = 200
+local FOVVisible = true
+local AimMode = "Center Screen"
+local TargetPart = "Head"
+local CurrentTarget
+local IgnoreFriends = false
+
+local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
+local GunLookup = {}
+for _, name in pairs(GunNames) do GunLookup[name] = true end
+
+-- Drawing
+local fovCircle = Drawing.new("Circle")
+fovCircle.Color = Color3.new(1,1,1)
+fovCircle.Thickness = 2
+fovCircle.NumSides = 100
+fovCircle.Radius = FOV
+fovCircle.Filled = false
+fovCircle.Visible = FOVVisible
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+local tracerLine = Drawing.new("Line")
+tracerLine.Color = Color3.new(1,0,0)
+tracerLine.Thickness = 0.7
+tracerLine.Visible = false
+
+-- Functions
+local function IsHoldingAllowedGun(args)
+    local ok, weapon = pcall(function() return args[3] end)
+    if not ok then return false end
+    if typeof(weapon) == "Instance" and GunLookup[weapon.Name] then
+        return true
+    end
+    for _, child in pairs(LocalPlayer.Character:GetChildren()) do
+        if (child:IsA("Tool") or child:IsA("Model")) and GunLookup[child.Name] then
+            return true
+        end
+    end
+    return false
+end
+
+local function GetClosestTarget()
+    local closest
+    local shortest = math.huge
+    local center
+    if AimMode == "Center Screen" then
+        center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    else
+        local mousePos = UserInputService:GetMouseLocation()
+        center = Vector2.new(mousePos.X, mousePos.Y)
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            if IgnoreFriends and LocalPlayer:GetFriendsOnline()[player.Name] then
+                continue
+            end
+            if player.Character and player.Character:FindFirstChild(TargetPart) then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(player.Character[TargetPart].Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist < FOV and dist < shortest then
+                        shortest = dist
+                        closest = player
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- Silent Aim Hook
+local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
+local oldFire
+oldFire = hookfunction(send.FireServer, function(self, ...)
+    local args = {...}
+    if SilentAimEnabled and IsHoldingAllowedGun(args) then
+        CurrentTarget = GetClosestTarget()
+        if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild(TargetPart) then
+            local part = CurrentTarget.Character[TargetPart]
+            args[4] = CFrame.new(1/0,1/0,1/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0)
+            args[5] = {[1]={[1]={["Instance"]=part,["Position"]=part.Position}}}
+        end
+    end
+    return oldFire(self, unpack(args))
+end)
+
+-- Update FOV and Tracer
+RunService.RenderStepped:Connect(function()
+    local center
+    if AimMode == "Center Screen" then
+        center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    else
+        local mousePos = UserInputService:GetMouseLocation()
+        center = Vector2.new(mousePos.X, mousePos.Y)
+    end
+
+    fovCircle.Position = center
+    fovCircle.Radius = FOV
+    fovCircle.Visible = FOVVisible
+
+    local target = GetClosestTarget()
+    if target and target.Character and target.Character:FindFirstChild(TargetPart) then
+        local partPos = target.Character[TargetPart].Position
+        local screenPos, onScreen = Camera:WorldToViewportPoint(partPos)
+        if onScreen then
+            local ourPart = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(TargetPart) and LocalPlayer.Character[TargetPart].Position
+            if ourPart then
+                local screenStart, startOnScreen = Camera:WorldToViewportPoint(ourPart)
+                if startOnScreen then
+                    tracerLine.From = Vector2.new(screenStart.X, screenStart.Y)
+                    tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
+                    tracerLine.Visible = FOVVisible
+                else
+                    tracerLine.Visible = false
+                end
+            else
+                tracerLine.Visible = false
+            end
+        else
+            tracerLine.Visible = false
+        end
+    else
+        tracerLine.Visible = false
+    end
+end)
+
+------------------------------------------------------
+-- UI COMBAT
+------------------------------------------------------
+CombatTab:Dropdown({
+    Title = "Target Part",
+    Desc = "Select which part to lock",
+    Values = {"Head", "UpperTorso"},
+    Value = "Head",
+    Callback = function(option)
+        TargetPart = option
+    end
+})
+
+CombatTab:Dropdown({
+    Title = "Aim Mode",
+    Desc = "Switch between Center Screen / Follow Mouse",
+    Values = {"Center Screen", "Follow Mouse"},
+    Value = "Center Screen",
+    Callback = function(option)
+        AimMode = option
+    end
+})
+
+CombatTab:Toggle({
+    Title = "Enable Silent Aim",
+    Desc = "Turn on/off Silent Aim",
+    Value = SilentAimEnabled,
+    Callback = function(state)
+        SilentAimEnabled = state
+    end
+})
+
+CombatTab:Toggle({
+    Title = "Show FOV Circle",
+    Desc = "Toggle FOV circle and tracer",
+    Value = FOVVisible,
+    Callback = function(state)
+        FOVVisible = state
+        fovCircle.Visible = state
+        tracerLine.Visible = state
+    end
+})
+
+CombatTab:Toggle({
+    Title = "Ignore Friends",
+    Desc = "Do not lock onto friends",
+    Value = IgnoreFriends,
+    Callback = function(state)
+        IgnoreFriends = state
+    end
+})
+
+------------------------------------------------------
+-- 🏠 Main Tab (Speed + Jump + Anti Look)
+------------------------------------------------------
+local MainTab = Window:Tab({
+    Title = "Main",
+    Icon = "home",
+    Locked = false,
+})
+
+local player = Players.LocalPlayer
+local SpeedEnabled = false
+local JumpEnabled = false
+local AntiLookEnabled = false
+local PickupEnabled = false
+
+-- Speed Function
+local function ApplySpeed()
+    if not player.Character then return end
+    local humanoid = player.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = 20
+        pcall(function() player:SetAttribute("SpeedMultiplier", 1.200) end)
+    end
+end
+
+local function RemoveSpeed()
+    if not player.Character then return end
+    local humanoid = player.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = 13
+        pcall(function() player:SetAttribute("SpeedMultiplier", 1) end)
+    end
+end
+
+MainTab:Toggle({
+    Title = "Speed",
+    Desc = "Toggle player walk speed boost",
+    Value = SpeedEnabled,
+    Callback = function(state)
+        SpeedEnabled = state
+        if state then ApplySpeed() else RemoveSpeed() end
+    end
+})
+
+-- Jump Function
+local function ApplyJump()
+    if not player.Character then return end
+    local humanoid = player.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.JumpPower = 23
+        humanoid.JumpHeight = 23
+        pcall(function() player:SetAttribute("JumpBoost", true) end)
+    end
+end
+
+local function RemoveJump()
+    if not player.Character then return end
+    local humanoid = player.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.JumpPower = 50
+        humanoid.JumpHeight = 7.2
+        pcall(function() player:SetAttribute("JumpBoost", false) end)
+    end
+end
+
+MainTab:Toggle({
+    Title = "Jump",
+    Desc = "Toggle jump boost (set JumpPower/Height to 23)",
+    Value = JumpEnabled,
+    Callback = function(state)
+        JumpEnabled = state
+        if state then ApplyJump() else RemoveJump() end
+    end
+})
+
+-- Anti Look (Dance)
+local ANIM_ID = "rbxassetid://104767795538635"
+local currentAnimTrack
+
+local function PlayAntiLook()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local humanoid = char:WaitForChild("Humanoid")
+    local anim = Instance.new("Animation")
+    anim.AnimationId = ANIM_ID
+    currentAnimTrack = humanoid:LoadAnimation(anim)
+    currentAnimTrack.Looped = true
+    currentAnimTrack:Play()
+end
+
+local function StopAntiLook()
+    if currentAnimTrack then
+        currentAnimTrack:Stop()
+        currentAnimTrack = nil
+    end
+end
+
+MainTab:Toggle({
+    Title = "Anti Look",
+    Desc = "Play anti look animation (loop)",
+    Value = AntiLookEnabled,
+    Callback = function(state)
+        AntiLookEnabled = state
+        if state then PlayAntiLook() else StopAntiLook() end
+    end
+})
+
+-- Respawn Handler
+player.CharacterAdded:Connect(function(newChar)
+    task.wait(1)
+    local humanoid = newChar:WaitForChild("Humanoid", 5)
+    local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
+    if not humanoid or not hrp then return end
+
+    if SpeedEnabled then ApplySpeed() end
+    if JumpEnabled then
+        humanoid.JumpPower = 23
+        humanoid.JumpHeight = 23
+    end
+    if AntiLookEnabled then PlayAntiLook() end
+end) 
+
+-- ฟังก์ชัน Pickup Items
+local DETECTION_RANGE = 18
+local MAGNET_SPEED = 50
+local PICKUP_ZONE_SIZE = 18
+
+local function adjustPickUpZone(instance)
+    local pickUpZone = instance:FindFirstChild("PickUpZone")
+    if pickUpZone and pickUpZone:IsA("BasePart") then
+        pickUpZone.Size = Vector3.new(PICKUP_ZONE_SIZE, PICKUP_ZONE_SIZE, PICKUP_ZONE_SIZE)
+        pickUpZone.CanCollide = false
+        pickUpZone.Transparency = 1
+    end
+end
+
+local function handleItem(item)
+    if not PickupEnabled then return end
+    local character = player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = character.HumanoidRootPart
+    local itemPos = item:GetPivot().Position
+    local distance = (hrp.Position - itemPos).Magnitude
+
+    if distance <= DETECTION_RANGE then
+        local direction = (hrp.Position - itemPos).Unit * MAGNET_SPEED * RunService.Heartbeat:Wait()
+        item:PivotTo(item:GetPivot() + CFrame.new(direction))
+        local remote = ReplicatedStorage:FindFirstChild("pickup_dropped_item")
+        if remote then
+            remote:FireServer(item)
+        else
+            warn("ไม่พบ Remote Event: pickup_dropped_item")
+        end
+    end
+end
+
+local function checkItems()
+    for _, item in pairs(workspace:GetChildren()) do
+        if item:FindFirstChild("PickUpZone") then
+            adjustPickUpZone(item)
+            handleItem(item)
+        end
+    end
+end
+
+RunService.Heartbeat:Connect(checkItems)
+workspace.DescendantAdded:Connect(function(instance)
+    if instance.Name == "PickUpZone" then
+        adjustPickUpZone(instance.Parent)
+    end
+end)
+
+-- Toggle เปิด/ปิด Pickup Items ใน Main Tab
+MainTab:Toggle({
+    Title = "Pickup Items",
+    Desc = "Enable or disable auto pickup around you",
+    Value = PickupEnabled,
+    Callback = function(state)
+        PickupEnabled = state
+    end
+})
+
+------------------------------------------------------
+-- ♾️ Infinite Stamina
+------------------------------------------------------
+local replicated = game:GetService("ReplicatedStorage")
+local SprintModule = require(replicated.Modules.Game.Sprint)
+local consume_stamina = SprintModule.consume_stamina
+local SprintBar = debug.getupvalue(consume_stamina, 2).sprint_bar
+
+local Old
+local InfinitestaminaEnabled = false
+
+local function EnableInfiniteStamina()
+    getgenv().Infinitestamina = true
+    if not Old then
+        Old = hookfunction(SprintBar.update, function(...)
+            if getgenv().Infinitestamina then
+                return Old(function() return 1 end)
+            else
+                return Old(...)
+            end
+        end)
+    end
+end
+
+local function DisableInfiniteStamina()
+    getgenv().Infinitestamina = false
+end
+
+-- ✅ ปุ่มในแท็บ MAIN
+MainTab:Toggle({
+    Title = "Infinite Stamina",
+    Desc = "ทำให้สแตมิน่าไม่ลดขณะวิ่ง",
+    Value = false,
+    Callback = function(state)
+        InfinitestaminaEnabled = state
+        if state then
+            EnableInfiniteStamina()
+        else
+            DisableInfiniteStamina()
+        end
+    end
+})
+
+------------------------------------------------------
+-- 🎯 WEAPON MODS TAB (Fire Rate)
+------------------------------------------------------
+local WeaponTab = Window:Tab({
+    Title = "Weapon Mods",
+    Icon = "crosshair",
+    Locked = false,
+})
+
+-- ⚡ Fire Rate Variables
+local FireRate = 400
+local FireRateEnabled = false
+
+-- รายชื่อปืนที่อนุญาตให้แก้ Fire Rate ได้
+local GunWhitelist = {
+    "AK47",
+    "MP5",
+    "M24",
+    "Glock",
+    "Draco",
+    "Uzi",
+    "P226",
+    "Remington",
+    "Double Barrel",
+    "G3",
+    "Hunting Rifle"
+}
+
+local AllowedGuns = {}
+for _, name in pairs(GunWhitelist) do
+    AllowedGuns[name] = true
+end
+
+-- ฟังก์ชันตรวจสอบว่าปืนที่ถืออยู่ถูกอนุญาตหรือไม่
+local function IsAllowedWeapon(args)
+    local ok, weapon = pcall(function()
+        return args[3]
+    end)
+    if not ok then return false end
+    if typeof(weapon) == "Instance" and AllowedGuns[weapon.Name] then
+        return true
+    end
+    for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
+        if (tool:IsA("Tool") or tool:IsA("Model")) and AllowedGuns[tool.Name] then
+            return true
+        end
+    end
+    return false
+end
+
+-- Toggle เปิด/ปิด Fire Rate
+WeaponTab:Toggle({
+    Title = "Enable Fire Rate",
+    Desc = "Toggle custom fire rate",
+    Value = FireRateEnabled,
+    Callback = function(state)
+        FireRateEnabled = state
+    end
+})
+
+-- Slider ปรับ Fire Rate
+WeaponTab:Slider({
+    Title = "Fire Rate",
+    Desc = "Adjust your bullet speed",
+    Step = 1,
+    Value = {
+        Min = 400,
+        Max = 1000,
+        Default = 400,
+    },
+    Callback = function(value)
+        FireRate = value
+    end
+})
+
+-- Hook การยิงจริง (รวมการตรวจสอบปืนที่อนุญาต)
+local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
+local oldFire
+oldFire = hookfunction(send.FireServer, function(self, ...)
+    local args = {...}
+
+    if SilentAimEnabled and IsAllowedWeapon(args) then
+        CurrentTarget = GetClosestTarget()
+        if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild(TargetPart) then
+            local part = CurrentTarget.Character[TargetPart]
+
+            -- ปรับ Fire Rate เฉพาะปืนที่อนุญาต
+            if FireRateEnabled then
+                args[2] = FireRate
+            end
+
+            -- Silent Aim override
+            args[4] = CFrame.new(1/0,1/0,1/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0)
+            args[5] = {
+                [1] = {
+                    [1] = {
+                        ["Instance"] = part,
+                        ["Position"] = part.Position
+                    }
+                }
+            }
+        end
+    end
+
+    return oldFire(self, unpack(args))
+end)
+
+local ESPTab = Window:Tab({
+    Title = "ESP",
+    Icon = "eye",
+    Locked = false,
+})
+
+local ESPEnabled = false
+local ESPBoxes = {}
+local MIN_SIZE = Vector2.new(3, 6) -- ขนาดเล็กสุดเมื่ออยู่ไกล
+local MAX_SIZE = Vector2.new(30, 70) -- ขนาดใกล้สุด
+
+-- สร้าง Box 2D
+local function createESPBox()
+    local box = Drawing.new("Square")
+    box.Thickness = 0.3
+    box.Filled = false
+    box.Color = Color3.new(1,1,1)
+    box.Visible = false
+    return box
+end
+
+-- อัปเดต Box ตามตัวละครและระยะ
+local function updateESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if hrp and humanoid then
+                if not ESPBoxes[player] then
+                    ESPBoxes[player] = createESPBox()
+                end
+                local box = ESPBoxes[player]
+
+                local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                if onScreen then
+                    -- ขนาดปรับตามระยะ
+                    local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
+                    local scale = math.clamp(50 / distance, 0, 1)
+                    box.Size = Vector2.new(
+                        math.clamp(MAX_SIZE.X * scale, MIN_SIZE.X, MAX_SIZE.X),
+                        math.clamp(MAX_SIZE.Y * scale, MIN_SIZE.Y, MAX_SIZE.Y)
+                    )
+
+                    box.Position = Vector2.new(
+                        screenPos.X - box.Size.X/2,
+                        screenPos.Y - box.Size.Y/2
+                    )
+                    box.Visible = ESPEnabled
+                else
+                    box.Visible = false
+                end
+            elseif ESPBoxes[player] then
+                ESPBoxes[player].Visible = false
+            end
+        elseif ESPBoxes[player] then
+            ESPBoxes[player].Visible = false
+        end
+    end
+end
+
+-- Toggle เปิด/ปิด ESP
+ESPTab:Toggle({
+    Title = "ESP Box 2D",
+    Desc = "Show 2D boxes around players with size based on distance",
+    Value = ESPEnabled,
+    Callback = function(state)
+        ESPEnabled = state
+        if not state then
+            for _, box in pairs(ESPBoxes) do
+                box:Remove()
+            end
+            ESPBoxes = {}
+        end
+    end
+})
+
+-- อัปเดตทุก RenderStep
+RunService.RenderStepped:Connect(function()
+    if ESPEnabled then
+        updateESP()
+    end
+end)
+
+-- ลบ Box เมื่อผู้เล่นออก
+Players.PlayerRemoving:Connect(function(player)
+    if ESPBoxes[player] then
+        ESPBoxes[player]:Remove()
+        ESPBoxes[player] = nil
+    end
+end)
+
+------------------------------------------------------
+-- 🧿 ESP NAME SYSTEM (Small + Auto Remove + Distance Scaled)
+------------------------------------------------------
+local ESPNameEnabled = false
+local ESPNames = {}
+
+-- ฟังก์ชันสร้างชื่อ ESP เหนือตัวผู้เล่น
+local function createESPName(player)
+    if not player.Character then return end
+    local head = player.Character:FindFirstChild("Head")
+    if not head then return end
+
+    -- ถ้ามีอยู่แล้วไม่ต้องสร้างซ้ำ
+    if ESPNames[player] then return end
+
+    local nameLabel = Drawing.new("Text")
+    nameLabel.Text = player.DisplayName or player.Name
+    nameLabel.Size = 10
+    nameLabel.Color = Color3.fromRGB(255, 255, 0) -- สีเหลือง
+    nameLabel.Center = true
+    nameLabel.Outline = true
+    nameLabel.Visible = true
+
+    ESPNames[player] = nameLabel
+end
+
+-- ฟังก์ชันลบชื่อเมื่อผู้เล่นออกหรือไม่มีในจอ
+local function removeESPName(player)
+    if ESPNames[player] then
+        ESPNames[player]:Remove()
+        ESPNames[player] = nil
+    end
+end
+
+-- อัปเดตตำแหน่งชื่อทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if not ESPNameEnabled then
+        for _, label in pairs(ESPNames) do
+            label.Visible = false
+        end
+        return
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local pos, visible = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 2.5, 0))
+            local distance = (Camera.CFrame.Position - head.Position).Magnitude
+
+            local label = ESPNames[player]
+            if not label then
+                createESPName(player)
+                label = ESPNames[player]
+            end
+
+            if visible then
+                label.Position = Vector2.new(pos.X, pos.Y)
+                label.Visible = true
+                -- ปรับขนาดตัวอักษรตามระยะ
+                local size = math.clamp(14 - (distance / 15), 8, 14)
+                label.Size = size
+            else
+       
