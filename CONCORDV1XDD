@@ -246,7 +246,7 @@ CombatTab:Toggle({
     Callback = function(state)
         IgnoreFriends = state
     end
-}
+})
 
 ------------------------------------------------------
 -- 🏠 Main Tab (Speed + Jump + Anti Look + Pickup + Infinite Stamina + UnderGround Hover)
@@ -470,3 +470,190 @@ RunService.Heartbeat:Connect(function()
         hrp.CFrame = CFrame.new(targetPos)
     end
 end)
+
+------------------------------------------------------
+-- 🖤 ESP Tab
+------------------------------------------------------
+local ESPTab = Window:Tab({
+    Title = "ESP",
+    Icon = "eye",
+    Locked = false,
+})
+
+local ESPEnabled = false
+local ESPBoxes = {}
+local MIN_SIZE = Vector2.new(3, 6)
+local MAX_SIZE = Vector2.new(30, 70)
+
+-- สร้าง Box 2D
+local function createESPBox()
+    local box = Drawing.new("Square")
+    box.Thickness = 0.3
+    box.Filled = false
+    box.Color = Color3.new(1,1,1)
+    box.Visible = false
+    return box
+end
+
+-- อัปเดต Box 2D
+local function updateESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if hrp and humanoid then
+                if not ESPBoxes[player] then
+                    ESPBoxes[player] = createESPBox()
+                end
+                local box = ESPBoxes[player]
+
+                local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                if onScreen then
+                    local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
+                    local scale = math.clamp(50 / distance, 0, 1)
+                    box.Size = Vector2.new(
+                        math.clamp(MAX_SIZE.X * scale, MIN_SIZE.X, MAX_SIZE.X),
+                        math.clamp(MAX_SIZE.Y * scale, MIN_SIZE.Y, MAX_SIZE.Y)
+                    )
+
+                    box.Position = Vector2.new(screenPos.X - box.Size.X/2, screenPos.Y - box.Size.Y/2)
+                    box.Visible = ESPEnabled
+                else
+                    box.Visible = false
+                end
+            elseif ESPBoxes[player] then
+                ESPBoxes[player].Visible = false
+            end
+        elseif ESPBoxes[player] then
+            ESPBoxes[player].Visible = false
+        end
+    end
+end
+
+-- Toggle ESP Box 2D
+ESPTab:Toggle({
+    Title = "ESP Box 2D",
+    Desc = "Show 2D boxes around players with size based on distance",
+    Value = ESPEnabled,
+    Callback = function(state)
+        ESPEnabled = state
+        if not state then
+            for _, box in pairs(ESPBoxes) do
+                box:Remove()
+            end
+            ESPBoxes = {}
+        end
+    end
+})
+
+RunService.RenderStepped:Connect(function()
+    if ESPEnabled then
+        updateESP()
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    if ESPBoxes[player] then
+        ESPBoxes[player]:Remove()
+        ESPBoxes[player] = nil
+    end
+end)
+
+------------------------------------------------------
+-- 🧿 ESP Name
+------------------------------------------------------
+local ESPNameEnabled = false
+local ESPNames = {}
+
+local function createESPName(player)
+    if not player.Character then return end
+    local head = player.Character:FindFirstChild("Head")
+    if not head then return end
+
+    if ESPNames[player] then return end
+
+    local nameLabel = Drawing.new("Text")
+    nameLabel.Text = player.DisplayName or player.Name
+    nameLabel.Size = 10
+    nameLabel.Color = Color3.fromRGB(255, 255, 0)
+    nameLabel.Center = true
+    nameLabel.Outline = true
+    nameLabel.Visible = true
+
+    ESPNames[player] = nameLabel
+end
+
+local function removeESPName(player)
+    if ESPNames[player] then
+        ESPNames[player]:Remove()
+        ESPNames[player] = nil
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not ESPNameEnabled then
+        for _, label in pairs(ESPNames) do
+            label.Visible = false
+        end
+        return
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local pos, visible = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 2.5, 0))
+            local distance = (Camera.CFrame.Position - head.Position).Magnitude
+
+            local label = ESPNames[player]
+            if not label then
+                createESPName(player)
+                label = ESPNames[player]
+            end
+
+            if visible then
+                label.Position = Vector2.new(pos.X, pos.Y)
+                label.Visible = true
+                local size = math.clamp(14 - (distance / 15), 8, 14)
+                label.Size = size
+            else
+                label.Visible = false
+            end
+        else
+            if ESPNames[player] then
+                ESPNames[player].Visible = false
+            end
+        end
+    end
+end)
+
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        task.wait(1)
+        createESPName(player)
+    end)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    removeESPName(player)
+end)
+
+RunService.Heartbeat:Connect(function()
+    for player, label in pairs(ESPNames) do
+        if not player.Character or not player.Character:FindFirstChild("Head") then
+            removeESPName(player)
+        end
+    end
+end)
+
+-- Toggle ESP Name
+ESPTab:Toggle({
+    Title = "ESP Name",
+    Desc = "Show player names above head (auto remove when off-screen or player leaves)",
+    Value = ESPNameEnabled,
+    Callback = function(state)
+        ESPNameEnabled = state
+        for _, label in pairs(ESPNames) do
+            label.Visible = state
+        end
+    end
+})
