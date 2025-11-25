@@ -1,0 +1,1301 @@
+-- 1️⃣ โหลด WindUI และบริการต่างๆ
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local Players, RunService, Camera, LocalPlayer, ReplicatedStorage =
+    game:GetService("Players"),
+    game:GetService("RunService"),
+    workspace.CurrentCamera,
+    game.Players.LocalPlayer,
+    game:GetService("ReplicatedStorage")
+
+-- 2️⃣ สร้างหน้าต่าง
+local Window = WindUI:CreateWindow({
+    Title = "👑XIUCO HUB PVP  v.0.2 t | paid⚔️",
+    Icon = "cat",
+    Author = "My Xiuco | Discord • https://discord.gg/sYjE3Kf3t",
+    Folder = "XINCOHubFolder",
+    Size = UDim2.fromOffset(400, 350),
+    Theme = "Light",
+    Transparent = true,
+    Resizable = true,
+})
+
+Window:EditOpenButton({
+    Title = "🎃XIUCO HUB | TesT👾",
+    Icon = "cat",
+    CornerRadius = UDim.new(0,30),
+    StrokeThickness = 3,
+    Color = ColorSequence.new(Color3.fromHex("910AC7"), Color3.fromHex("910AC7")),
+    OnlyMobile = false,
+    Enabled = true,
+    Draggable = true
+})
+
+-- 3️⃣ Tab Combat & Weapon
+local CombatTab = Window:Tab({Title = "Combat", Icon = "crosshair"})
+CombatTab:Section({Title="Gun :"})
+
+local WeaponTab = Window:Tab({Title = "Weapon Mods:", Icon = "crosshair"})
+WeaponTab:Section({Title="Weapon Mods :"})
+
+local CheaterTab = Window:Tab({Title = "Cheater", Icon = "user"})
+CheaterTab:Section({Title="PLAYER  :"})
+
+local EspTab = Window:Tab({Title = "Esp", Icon = "user"})
+EspTab:Section({Title="Esp PLAYER  :"})
+
+
+
+-- 4️⃣ ตัวแปร Value สำหรับปรับในเกม
+local SilentAimEnabledValue = Instance.new("BoolValue", LocalPlayer); SilentAimEnabledValue.Name = "SilentAimEnabled"; SilentAimEnabledValue.Value = false
+local AttackAntiLockEnabledValue = Instance.new("BoolValue", LocalPlayer); AttackAntiLockEnabledValue.Name = "AttackAntiLockEnabled"; AttackAntiLockEnabledValue.Value = false
+local MagicBulletEnabledValue = Instance.new("BoolValue", LocalPlayer); MagicBulletEnabledValue.Name = "MagicBulletEnabled"; MagicBulletEnabledValue.Value = false
+local TargetPartValue = Instance.new("StringValue", LocalPlayer); TargetPartValue.Name = "TargetPart"; TargetPartValue.Value = "Head"
+local FOVRadiusValue = Instance.new("NumberValue", LocalPlayer); FOVRadiusValue.Name = "FOVRadius"; FOVRadiusValue.Value = 230
+local MaxLockDistanceValue = Instance.new("NumberValue", LocalPlayer); MaxLockDistanceValue.Name = "MaxLockDistance"; MaxLockDistanceValue.Value = 1000
+local FireRateEnabled = Instance.new("BoolValue", LocalPlayer); FireRateEnabled.Name = "FireRateEnabled"; FireRateEnabled.Value = false
+local FireRateValue = Instance.new("NumberValue", LocalPlayer); FireRateValue.Name = "FireRate"; FireRateValue.Value = 370
+local AimModeValue = Instance.new("StringValue", LocalPlayer); AimModeValue.Name = "AimMode"; AimModeValue.Value = "Center"
+
+local CurrentTarget
+local head, aimPos
+local IgnorePlayers = {}
+
+local GunNames = {
+    "P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9",
+    "Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"
+}
+local GunLookup = {}
+for _, name in pairs(GunNames) do GunLookup[name] = true end
+
+-- 5️⃣ FOV Polygon (15 เหลี่ยม)
+local sides = 20
+local fovPolygon = {}
+for i = 1, sides do
+    fovPolygon[i] = Drawing.new("Line")
+    fovPolygon[i].Color = Color3.fromRGB(0,255,0)
+    fovPolygon[i].Thickness = 3
+    fovPolygon[i].Visible = false
+end
+
+-- 6️⃣ Tracer Line
+local tracerLine = Drawing.new("Line")
+tracerLine.Color = Color3.fromRGB(0,255,0)
+tracerLine.Thickness = 3
+tracerLine.Visible = false
+
+-- 7️⃣ Target Box 45°
+local targetBox = Drawing.new("Quad")
+targetBox.Color = Color3.fromRGB(255,255,255)
+targetBox.Thickness = 1
+targetBox.Visible = false
+
+-- 8️⃣ Prediction
+local PREDICTION_FACTOR_NORMAL = 0.165
+local PREDICTION_FACTOR = PREDICTION_FACTOR_NORMAL
+local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
+
+-- 9️⃣ ฟังก์ชันช่วย: เลือกเป้าหมาย
+local function GetClosestTarget()
+    local closest
+    local shortest = math.huge
+    local center
+    if AimModeValue.Value == "Center" then
+        center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    else
+        local mouseLocation = game:GetService("UserInputService"):GetMouseLocation()
+        center = Vector2.new(mouseLocation.X, mouseLocation.Y)
+    end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(TargetPartValue.Value) then
+            -- ไม่ล็อคคนตาย
+            local humanoid = player.Character:FindFirstChildWhichIsA("Humanoid")
+            if not humanoid or humanoid.Health <= 0 then
+                continue
+            end
+
+            local skip = false
+            for _, name in pairs(IgnorePlayers) do
+                if player.Name == name then skip = true break end
+            end
+            if skip then continue end
+
+            local screenPos, onScreen = Camera:WorldToViewportPoint(player.Character[TargetPartValue.Value].Position)
+            if onScreen then
+                local distToScreenCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                local distToPlayer = (player.Character[TargetPartValue.Value].Position - LocalPlayer.Character.Head.Position).Magnitude
+                if distToScreenCenter < FOVRadiusValue.Value and distToPlayer <= MaxLockDistanceValue.Value and distToScreenCenter < shortest then
+                    shortest = distToScreenCenter
+                    closest = player
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function PredictPosition(part)
+    local root = part.Parent:FindFirstChild("HumanoidRootPart")
+    if not root then return part.Position end
+
+    if AttackAntiLockEnabledValue.Value then
+        local headCFrame = part.CFrame
+        local forward = headCFrame.LookVector
+        return part.Position + forward * PREDICTION_FACTOR * 5
+    end
+
+    local velocity = root.Velocity
+    local prediction = part.Position + (velocity * PREDICTION_FACTOR)
+    local seat = root:FindFirstChildWhichIsA("WeldConstraint") or root:FindFirstChildWhichIsA("Weld")
+    if seat and seat.Part0 then
+        prediction = part.Position + (seat.Part0.Velocity * PREDICTION_FACTOR * 1.2)
+    end
+    return prediction
+end
+
+local function IsHoldingAllowedGun(args)
+    local ok, weapon = pcall(function() return args[3] end)
+    if not ok then return false end
+    if typeof(weapon) == "Instance" and GunLookup[weapon.Name] then return true end
+    for _, child in pairs(LocalPlayer.Character:GetChildren()) do
+        if (child:IsA("Tool") or child:IsA("Model")) and GunLookup[child.Name] then
+            return true
+        end
+    end
+    return false
+end
+
+local function UpdateFireRate()
+    if not FireRateEnabled.Value then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") and GunLookup[tool.Name] then
+            for _, val in pairs(tool:GetChildren()) do
+                if val:IsA("NumberValue") and val.Name:lower():find("fire") then
+                    val.Value = FireRateValue.Value
+                end
+            end
+            if tool:FindFirstChild("FireRate") then
+                tool.FireRate.Value = FireRateValue.Value
+            end
+        end
+    end
+end
+
+LocalPlayer.Character.ChildAdded:Connect(function(child)
+    if child:IsA("Tool") and GunLookup[child.Name] then
+        UpdateFireRate()
+    end
+end)
+
+-- 🔟 Hook ยิง
+local oldFire
+oldFire = hookfunction(send.FireServer, function(self, ...)
+    local args = {...}
+    if SilentAimEnabledValue.Value and IsHoldingAllowedGun(args) then
+        CurrentTarget = GetClosestTarget()
+        if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild(TargetPartValue.Value) then
+            head = CurrentTarget.Character[TargetPartValue.Value]
+            aimPos = PredictPosition(head)
+
+            -- รอยกระสุน
+            local ourHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+            if ourHead then
+                local startPos = ourHead.Position
+                local distance = (aimPos - startPos).Magnitude
+                local beam = Instance.new("Part", workspace)
+                beam.Anchored = true
+                beam.CanCollide = false
+                beam.Material = Enum.Material.Neon
+                beam.Size = Vector3.new(0.15,0.15,distance)
+                beam.CFrame = CFrame.new(startPos, aimPos) * CFrame.new(0,0,-distance/2)
+                beam.Color = Color3.fromRGB(255,255,255)
+                game:GetService("Debris"):AddItem(beam, 1.5)
+            end
+
+            if MagicBulletEnabledValue.Value then
+                args[4] = CFrame.new(1/0,1/0,1/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0)
+                args[5] = {[1]={[1]={["Instance"]=head,["Position"]=aimPos}}}
+            else
+                args[4] = CFrame.new(LocalPlayer.Character.Head.Position, aimPos)
+                args[5] = {[1]={[1]={["Instance"]=head,["Position"]=aimPos}}}
+            end
+        end
+    end
+    return oldFire(self, unpack(args))
+end)
+
+-- 1️⃣1️⃣ RenderStepped ปรับ polygon, tracer, target box
+RunService.RenderStepped:Connect(function()
+    local center
+    if AimModeValue.Value == "Center" then
+        center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    else
+        local mouseLocation = game:GetService("UserInputService"):GetMouseLocation()
+        center = Vector2.new(mouseLocation.X, mouseLocation.Y)
+    end
+
+    local radius = FOVRadiusValue.Value
+
+    if not SilentAimEnabledValue.Value then
+        for i = 1, sides do fovPolygon[i].Visible = false end
+        tracerLine.Visible = false
+        targetBox.Visible = false
+        return
+    end
+
+    -- Polygon
+    local angleStep = 2*math.pi / sides
+    local points = {}
+    for i = 1, sides do
+        local angle = angleStep * (i-1)
+        points[i] = Vector2.new(center.X + math.cos(angle)*radius, center.Y + math.sin(angle)*radius)
+    end
+    for i = 1, sides do
+        fovPolygon[i].From = points[i]
+        fovPolygon[i].To = points[i % sides + 1]
+        fovPolygon[i].Visible = true
+    end
+
+    -- Tracer & Target Box
+    local target = GetClosestTarget()
+    if target and target.Character and target.Character:FindFirstChild(TargetPartValue.Value) then
+        local predictedPos = PredictPosition(target.Character[TargetPartValue.Value])
+        local screenPos, onScreen = Camera:WorldToViewportPoint(predictedPos)
+        if onScreen then
+            tracerLine.From = center
+            tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
+            tracerLine.Visible = true
+
+            local size = 15
+            local diag = size/math.sqrt(2)
+            local screenCorners = {
+                Vector2.new(screenPos.X - diag, screenPos.Y),
+                Vector2.new(screenPos.X, screenPos.Y - diag),
+                Vector2.new(screenPos.X + diag, screenPos.Y),
+                Vector2.new(screenPos.X, screenPos.Y + diag),
+            }
+            targetBox.PointA = screenCorners[1]
+            targetBox.PointB = screenCorners[2]
+            targetBox.PointC = screenCorners[3]
+            targetBox.PointD = screenCorners[4]
+            targetBox.Visible = true
+        else
+            tracerLine.Visible = false
+            targetBox.Visible = false
+        end
+    else
+        tracerLine.Visible = false
+        targetBox.Visible = false
+    end
+end)
+
+-- ======= CombatTab UI =======
+CombatTab:Toggle({
+    Title = "Silent Aim",
+    Icon = "circle-check",
+    Value = SilentAimEnabledValue.Value,
+    Callback = function(state)
+        SilentAimEnabledValue.Value = state
+    end
+})
+
+CombatTab:Toggle({
+    Title = "Attack Anti aim",
+    Icon = "circle-check",
+    Value = AttackAntiLockEnabledValue.Value,
+    Callback = function(state)
+        AttackAntiLockEnabledValue.Value = state
+        PREDICTION_FACTOR = state and 0.165 or PREDICTION_FACTOR_NORMAL
+    end
+})
+
+CombatTab:Slider({
+    Title = "FOV :",
+    Step = 5,
+    Value = {Min = 10, Max = 1000, Default = FOVRadiusValue.Value},
+    Callback = function(value)
+        FOVRadiusValue.Value = value
+    end
+})
+
+CombatTab:Dropdown({
+    Title = "aim shoot",
+    Values = {"Head","UpperTorso"},
+    Value = TargetPartValue.Value,
+    Callback = function(option)
+        TargetPartValue.Value = option
+    end
+})
+
+CombatTab:Input({
+    Title = "safe Players",
+    Placeholder = "ใส่ชื่อเพื่อนที่ไม่อยากล็อค, คั่นด้วย ,",
+    InputIcon = "shield-check",
+    Callback = function(txt)
+        IgnorePlayers = {}
+        for inputName in string.gmatch(txt, '([^,]+)') do
+            inputName = inputName:match("^%s*(.-)%s*$")
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if string.lower(plr.Name) == string.lower(inputName) then
+                    table.insert(IgnorePlayers, plr.Name)
+                end
+            end
+        end
+    end
+})
+
+CombatTab:Divider()
+
+CombatTab:Dropdown({
+    Title = "Aim Mode",
+    Values = {"Center", "Mouse"},
+    Value = AimModeValue.Value,
+    Callback = function(option)
+        AimModeValue.Value = option
+    end
+})
+
+CombatTab:Slider({
+    Title = "aim Distance",
+    Step = 5,
+    Value = {Min = 200, Max = 3000, Default = MaxLockDistanceValue.Value},
+    Callback = function(value)
+        MaxLockDistanceValue.Value = value
+    end
+})
+
+
+CombatTab:Toggle({
+    Title = "Magic Bullet",
+    Icon = "circle-check",
+    Value = MagicBulletEnabledValue.Value,
+    Callback = function(state)
+        MagicBulletEnabledValue.Value = state
+    end
+})
+
+-- ======= WeaponTab UI =======
+WeaponTab:Toggle({
+    Title = "Fire Rate",
+    Icon = "circle-check",
+    Value = FireRateEnabled.Value,
+    Callback = function(state)
+        FireRateEnabled.Value = state
+        UpdateFireRate()
+    end
+})
+
+WeaponTab:Slider({
+    Title = "Fire Rate",
+    Step = 1,
+    Value = {Min = 100, Max = 1000, Default = FireRateValue.Value},
+    Callback = function(value)
+        FireRateValue.Value = value
+        UpdateFireRate()
+    end
+})
+
+
+local player = Players.LocalPlayer
+local HideNameEnabled = false
+local SpeedEnabled = false
+local JumpEnabled = false
+local AntiLookEnabled = false
+local PickupEnabled = false
+
+-- ========================
+-- ฟังก์ชันซ่อนชื่อ
+-- ========================
+local function RemoveBillboardGui()
+    local character = LocalPlayer.Character
+    if character then
+        for _, child in pairs(character:GetChildren()) do
+            if child:IsA("BillboardGui") then
+                child:Destroy()
+            end
+        end
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            for _, child in pairs(hrp:GetChildren()) do
+                if child:IsA("BillboardGui") then
+                    child:Destroy()
+                end
+            end
+        end
+    end
+end
+
+CheaterTab:Toggle({
+    Title = "Hide Name",
+    Icon = "circle-check",
+    Value = HideNameEnabled,
+    Callback = function(state)
+        HideNameEnabled = state
+        if state then RemoveBillboardGui() end
+    end
+})
+
+-- Auto remove BillboardGui เมื่อเกิดใหม่
+LocalPlayer.Character.ChildAdded:Connect(function(child)
+    if HideNameEnabled and child:IsA("BillboardGui") then
+        child:Destroy()
+    end
+end)
+workspace.ChildAdded:Connect(function(child)
+    if HideNameEnabled and child:IsA("Model") and child.Name == LocalPlayer.Name then
+        child.ChildAdded:Connect(function(c)
+            if HideNameEnabled and c:IsA("BillboardGui") then
+                c:Destroy()
+            end
+        end)
+    end
+end)
+
+local speedEnabled = false
+local speedMultiplier = 0.10
+
+CheaterTab:Toggle({
+    Title = "Speed",
+    Icon = "circle-check",
+    Default = false,
+    Callback = function(state)
+        speedEnabled = state
+    end
+})
+
+RunService.RenderStepped:Connect(function(delta)
+    if speedEnabled and player.Character then
+        local char = player.Character
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if hum and root then
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+                root.CFrame = root.CFrame + moveDir.Unit * speedMultiplier * delta * 60
+            end
+        end
+    end
+end)
+
+-- ========================
+-- ฟังก์ชันกระโดดสูง
+-- ========================
+local function ApplyJump()
+    local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.JumpPower = 20
+        humanoid.JumpHeight = 20
+    end
+end
+local function RemoveJump()
+    local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.JumpPower = 50
+        humanoid.JumpHeight = 7.2
+    end
+end
+CheaterTab:Toggle({
+    Title = "Jump",
+    Icon = "circle-check",
+    Value = JumpEnabled,
+    Callback = function(state)
+        JumpEnabled = state
+        if state then ApplyJump() else RemoveJump() end
+    end
+})
+
+-- ========================
+-- Respawn Handling
+-- ========================
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    if HideNameEnabled then RemoveBillboardGui() end
+    if SpeedEnabled then ApplySpeed() end
+    if JumpEnabled then ApplyJump() end
+end)
+
+
+-- ========================
+-- Anti Look
+-- ========================
+local ANIM_ID = "rbxassetid://104767795538635"
+local currentAnimTrack
+local function PlayAntiLook()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local humanoid = char:WaitForChild("Humanoid")
+    local anim = Instance.new("Animation")
+    anim.AnimationId = ANIM_ID
+    currentAnimTrack = humanoid:LoadAnimation(anim)
+    currentAnimTrack.Looped = true
+    currentAnimTrack:Play()
+end
+local function StopAntiLook()
+    if currentAnimTrack then
+        currentAnimTrack:Stop()
+        currentAnimTrack = nil
+    end
+end
+CheaterTab:Toggle({
+    Title = "Anti Lock",
+    Icon = "circle-check",
+    Value = AntiLookEnabled,
+    Callback = function(state)
+        AntiLookEnabled = state
+        if state then PlayAntiLook() else StopAntiLook() end
+    end
+})
+
+-- ========================
+-- Infinite Jump
+-- ========================
+local InfiniteJumpEnabled = false
+local UIS = game:GetService("UserInputService")
+
+CheaterTab:Toggle({
+    Title = "Infinite Jump",
+    Icon = "circle-check",
+    Value = InfiniteJumpEnabled,
+    Callback = function(state)
+        InfiniteJumpEnabled = state
+    end
+})
+
+UIS.JumpRequest:Connect(function()
+    if InfiniteJumpEnabled then
+        local char = player.Character
+        local humanoid = char and char:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
+
+
+-- ========================
+-- Max Stamina
+-- ========================
+CheaterTab:Divider()
+CheaterTab:Slider({
+    Title = "Max Stamina",
+    Step = 1,
+    Value = {Min = 120, Max = 10000, Default = 100},
+    Callback = function(value)
+        player:SetAttribute("MaxStamina", value)
+        print("[✅] เปลี่ยนค่า MaxStamina =", value)
+    end
+})
+
+-- ========================
+-- Pickup Items
+-- ========================
+CheaterTab:Section({Title="Pickup Items  :"})
+local DETECTION_RANGE = 16
+local PICKUP_ZONE_SIZE = 16
+local MAGNET_SPEED = 50
+
+local function adjustPickUpZone(instance)
+    local pickUpZone = instance:FindFirstChild("PickUpZone")
+    if pickUpZone and pickUpZone:IsA("BasePart") then
+        pickUpZone.Size = Vector3.new(PICKUP_ZONE_SIZE, PICKUP_ZONE_SIZE, PICKUP_ZONE_SIZE)
+        pickUpZone.CanCollide = false
+        pickUpZone.Transparency = 2
+    end
+end
+
+local function handleItem(item)
+    if not PickupEnabled then return end
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
+    local itemPos = item:GetPivot().Position
+    local distance = (hrp.Position - itemPos).Magnitude
+    if distance <= DETECTION_RANGE then
+        local direction = (hrp.Position - itemPos).Unit * MAGNET_SPEED * RunService.Heartbeat:Wait()
+        item:PivotTo(item:GetPivot() + CFrame.new(direction))
+        local remote = ReplicatedStorage:FindFirstChild("pickup_dropped_item")
+        if remote then remote:FireServer(item) end
+    end
+end
+
+local function checkItems()
+    for _, item in pairs(workspace:GetChildren()) do
+        if item:FindFirstChild("PickUpZone") then
+            adjustPickUpZone(item)
+            handleItem(item)
+        end
+    end
+end
+
+RunService.Heartbeat:Connect(checkItems)
+workspace.DescendantAdded:Connect(function(instance)
+    if instance.Name == "PickUpZone" then
+        adjustPickUpZone(instance.Parent)
+    end
+end)
+
+CheaterTab:Toggle({
+    Title = "Pickup Items",
+    Icon = "circle-check",
+    Value = PickupEnabled,
+    Callback = function(state)
+        PickupEnabled = state
+    end
+})
+
+-- ========================
+-- Anti Kill / Underground (หมุนเป็นวงกลม)
+-- ========================
+CheaterTab:Section({Title="att  :"})
+local UndergroundEnabled = false
+local UndergroundAutoEnabled = true
+local AntiRagdollEnabled = false
+
+local UndergroundDepth = 50
+local SpinSpeed = 2080
+local UndergroundRadius = 6
+local UndergroundAngle = 0
+
+local function StartUnderground()
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    UndergroundEnabled = true
+    local initialY = hrp.Position.Y - UndergroundDepth
+
+    local conn
+    conn = RunService.RenderStepped:Connect(function(delta)
+        if not UndergroundEnabled or not hrp.Parent then
+            conn:Disconnect()
+            return
+        end
+
+        UndergroundAngle = (UndergroundAngle + SpinSpeed * delta) % 360
+        local rad = math.rad(UndergroundAngle)
+
+        local offsetX = math.cos(rad) * UndergroundRadius
+        local offsetZ = math.sin(rad) * UndergroundRadius
+        local newPos = Vector3.new(hrp.Position.X + offsetX, initialY, hrp.Position.Z + offsetZ)
+
+        hrp.CFrame = CFrame.new(newPos, Vector3.new(hrp.Position.X, initialY, hrp.Position.Z))
+    end)
+end
+
+local function StopUnderground()
+    UndergroundEnabled = false
+end
+
+local function AntiRagdoll()
+    local char = player.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not hrp then return end
+    if humanoid.PlatformStand then
+        humanoid.PlatformStand = false
+        humanoid.Sit = false
+        hrp.Velocity = Vector3.new(0,0,0)
+        hrp.RotVelocity = Vector3.new(0,0,0)
+    end
+end
+
+-- อัปเดตทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    local char = player.Character
+    if not char then return end
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not humanoid then return end
+
+    -- Underground Auto
+    if UndergroundAutoEnabled then
+        if humanoid.Health <= 15 and humanoid.Health > 0 then
+            if not UndergroundEnabled then StartUnderground() end
+        elseif humanoid.Health >= 30 or humanoid.Health == 0 then
+            if UndergroundEnabled then StopUnderground() end
+        end
+    end
+
+    -- Anti Ragdoll
+    if AntiRagdollEnabled then
+        AntiRagdoll()
+    end
+end)
+
+-- Toggle ปุ่ม
+CheaterTab:Toggle({
+    Title = "Anti Kill",
+    Icon = "circle-check",
+    Value = UndergroundAutoEnabled,
+    Callback = function(state)
+        UndergroundAutoEnabled = state
+        if not state then UndergroundEnabled = false end
+    end
+})
+
+CheaterTab:Toggle({
+    Title = "Anti Ragdoll",
+    Icon = "circle-check",
+    Value = AntiRagdollEnabled,
+    Callback = function(state)
+        AntiRagdollEnabled = state
+    end
+})
+
+CheaterTab:Divider()
+
+CheaterTab:Section({Title="Snap PC key [ Z  ] :"})
+
+-- Snap / Dig 0.1s Function (ใช้ค่าเดิม)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local isRunning = false
+local heightOffset = -7   -- ความลึกเริ่มต้น
+local duration = 0.1      -- เวลา 0.1 วิ
+local direction = "Down"  -- Down หรือ Up
+
+local function SnapQuick()
+    if isRunning then return end
+    isRunning = true
+
+    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local Humanoid = Character:FindFirstChild("Humanoid")
+    local HRP = Character:FindFirstChild("HumanoidRootPart")
+    if not Humanoid or not HRP then isRunning = false return end
+
+    Humanoid.Sit = true
+    local originalY = HRP.Position.Y
+
+    local offset = math.abs(heightOffset)
+    if direction == "Down" then offset = -offset end
+
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if HRP and HRP.Parent then
+            local targetY = originalY + offset
+            HRP.CFrame = HRP.CFrame:Lerp(
+                CFrame.new(HRP.Position.X, targetY, HRP.Position.Z),
+                0.8
+            )
+        end
+    end)
+
+    task.wait(duration)
+
+    if connection then
+        connection:Disconnect()
+        connection = nil
+    end
+
+    Humanoid.Sit = false
+    isRunning = false
+end
+
+-- ===== UI Elements =====
+-- Button
+CheaterTab:Button({
+    Title = "Snap Click",
+    Locked = false,
+    Callback = function()
+        SnapQuick()
+    end
+})
+
+-- Slider (ความลึก 1–10)
+CheaterTab:Slider({
+    Title = "Snap Depth",
+    Step = 1,
+    Value = {Min = 1, Max = 50, Default = math.abs(heightOffset)},
+    Callback = function(value)
+        local sign = (direction == "Down") and -1 or 1
+        heightOffset = value * sign
+        print("[Snap Depth] set to:", value)
+    end
+})
+
+-- Dropdown (ทิศทาง Down / Up)
+CheaterTab:Dropdown({
+    Title = "Snap Direction",
+    Values = {"Down", "Up"},
+    Value = direction,
+    Callback = function(option)
+        direction = option
+        local sign = (option == "Down") and -1 or 1
+        heightOffset = math.abs(heightOffset) * sign
+        print("[Snap Direction] selected:", option)
+    end
+})
+
+-- Key Z
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.Z then
+        SnapQuick()
+    end
+end)
+
+
+-- ตัวแปรควบคุม ESP
+local ESPEnabled = false
+local ESPConnections = {}
+
+-- ========================
+-- ESP NAME (Pixel Outline)
+-- ========================
+
+local ESP_Enabled = false
+local ESP_Objects = {}
+
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    if ESP_Objects[player] then return end
+
+    local character = player.Character
+    local head = character and character:FindFirstChild("Head")
+    if not head then return end
+
+    -- BillboardGui
+    local bill = Instance.new("BillboardGui")
+    bill.Name = "ESP_Name"
+    bill.Adornee = head
+    bill.Size = UDim2.new(0, 200, 0, 30)
+    bill.StudsOffset = Vector3.new(0, 5, 0) -- ขึ้นเหนือหัว
+    bill.AlwaysOnTop = true
+    bill.MaxDistance = 10000
+    bill.Parent = head
+
+    -- ฟังก์ชันสร้าง TextLabel รอบตัว (ขอบดำ)
+    local function CreateOutlineLabel(offsetX, offsetY)
+        local lbl = Instance.new("TextLabel")
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 12
+        lbl.TextColor3 = Color3.fromRGB(0, 0, 0) -- ขอบดำ
+        lbl.TextStrokeTransparency = 1
+        lbl.Position = UDim2.new(0, offsetX, 0, offsetY)
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.Text = player.Name
+        lbl.Parent = bill
+        return lbl
+    end
+
+    -- สร้างขอบ 8 ทิศทาง
+    local offsets = {
+        Vector2.new(-1, -1), Vector2.new(0, -1), Vector2.new(1, -1),
+        Vector2.new(-1, 0),                  Vector2.new(1, 0),
+        Vector2.new(-1, 1),  Vector2.new(0, 1),  Vector2.new(1, 1)
+    }
+    for _, offset in pairs(offsets) do
+        CreateOutlineLabel(offset.X, offset.Y)
+    end
+
+    -- TextLabel ตัวกลางสีขาว
+    local mainLabel = Instance.new("TextLabel")
+    mainLabel.BackgroundTransparency = 1
+    mainLabel.Font = Enum.Font.GothamBold
+    mainLabel.TextSize = 12
+    mainLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    mainLabel.TextStrokeTransparency = 1
+    mainLabel.Size = UDim2.new(1, 0, 1, 0)
+    mainLabel.Text = player.Name
+    mainLabel.Parent = bill
+
+    ESP_Objects[player] = bill
+end
+
+local function RemoveESP(player)
+    if ESP_Objects[player] then
+        ESP_Objects[player]:Destroy()
+        ESP_Objects[player] = nil
+    end
+end
+
+local function DisableESP()
+    for player, gui in pairs(ESP_Objects) do
+        gui:Destroy()
+    end
+    ESP_Objects = {}
+end
+
+local function UpdateESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if not ESP_Objects[player] and player.Character and player.Character:FindFirstChild("Head") then
+            CreateESP(player)
+        end
+    end
+
+    for player, gui in pairs(ESP_Objects) do
+        if not player.Parent or not player.Character or not player.Character:FindFirstChild("Head") then
+            RemoveESP(player)
+        end
+    end
+end
+
+-- ====== UI Toggle ======
+EspTab:Toggle({
+    Title = "ESP Name",
+    Icon = "circle-check",
+    Value = ESP_Enabled,
+    Callback = function(state)
+        ESP_Enabled = state
+        if state then
+            UpdateESP()
+        else
+            DisableESP()
+        end
+    end
+})
+
+-- อัปเดตเรียลไทม์ทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if ESP_Enabled then
+        UpdateESP()
+    end
+end)
+
+-- ========================
+-- ESP Health (Fix ให้ไม่หาย)
+-- ========================
+local ESPHealthEnabled = false
+local HealthESP_Objects = {}
+
+local nearSize = UDim2.new(10, 1, 0, 1)
+local farSize  = UDim2.new(70, 1, 0, 1)
+local nearDistance = 300
+local farDistance = 299
+local maxDistance = 10000
+
+local function SetBillboardSize(bill, distance)
+    if distance <= nearDistance then
+        bill.Size = nearSize
+    elseif distance >= farDistance and distance <= maxDistance then
+        bill.Size = farSize
+    else
+        bill.Size = UDim2.new(0, 110, 0, 12)
+    end
+end
+
+local function CreateHealthESP(player)
+    if player == LocalPlayer then return end
+
+    -- ลบของเก่าเพื่อกันซ้อน
+    if HealthESP_Objects[player] then
+        HealthESP_Objects[player].Billboard:Destroy()
+        HealthESP_Objects[player] = nil
+    end
+
+    local char = player.Character
+    local head = char and char:FindFirstChild("Head")
+    local humanoid = char and char:FindFirstChild("Humanoid")
+    if not head or not humanoid then return end
+
+    local bill = Instance.new("BillboardGui")
+    bill.Name = "HealthESP"
+    bill.Adornee = head
+    bill.AlwaysOnTop = true
+    bill.MaxDistance = 10000
+    bill.Size = nearSize
+    bill.StudsOffset = Vector3.new(0, -3, 0)
+    bill.Parent = head
+
+    local bg = Instance.new("Frame")
+    bg.BackgroundColor3 = Color3.new(0,0,0)
+    bg.BorderSizePixel = 0
+    bg.Size = UDim2.new(1, 2, 1, 2)
+    bg.Position = UDim2.new(0, -1, 0, -1)
+    bg.Parent = bill
+
+    local bar = Instance.new("Frame")
+    bar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    bar.BorderSizePixel = 0
+    bar.Size = UDim2.new(1, 0, 1, 0)
+    bar.Parent = bill
+
+    HealthESP_Objects[player] = {
+        Billboard = bill,
+        Bar = bar,
+        Humanoid = humanoid
+    }
+end
+
+local function SafeUpdateHealth(player, data)
+    local char = player.Character
+    if not char then return end
+
+    local head = char:FindFirstChild("Head")
+    if not head then
+        CreateHealthESP(player)
+        return
+    end
+
+    -- ถ้า GUI หาย → สร้างใหม่ทันที
+    if not data.Billboard or not data.Billboard.Parent then
+        CreateHealthESP(player)
+        return
+    end
+
+    local humanoid = data.Humanoid
+    if not humanoid or humanoid.Parent == nil then
+        CreateHealthESP(player)
+        return
+    end
+
+    -- อัปเดตเลือด
+    local hp = math.clamp(humanoid.Health, 0, humanoid.MaxHealth)
+    local percent = hp / humanoid.MaxHealth
+
+    -- สีเลือด
+    if percent > 0.5 then
+        data.Bar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    elseif percent > 0.1 then
+        data.Bar.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    else
+        data.Bar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    end
+
+    data.Bar.Size = UDim2.new(percent, 0, 1, 0)
+
+    -- ปรับขนาดคงที่ตามระยะ
+    local camPos = workspace.CurrentCamera.CFrame.Position
+    local distance = (camPos - head.Position).Magnitude
+    SetBillboardSize(data.Billboard, distance)
+end
+
+local function MaintainHealthESP()
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if not HealthESP_Objects[p] then
+                CreateHealthESP(p)
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not ESPHealthEnabled then return end
+
+    MaintainHealthESP()
+
+    for player, data in pairs(HealthESP_Objects) do
+        SafeUpdateHealth(player, data)
+    end
+end)
+
+EspTab:Toggle({
+    Title = "Health",
+    Icon = "circle-check",
+    Value = ESPHealthEnabled,
+    Callback = function(state)
+        ESPHealthEnabled = state
+        if not state then
+            for p, obj in pairs(HealthESP_Objects) do
+                obj.Billboard:Destroy()
+            end
+            HealthESP_Objects = {}
+        end
+    end
+})
+
+
+local ESP_DistanceEnabled = false
+local ESP_DistanceObjects = {}
+
+local function CreateESPDistance(player)
+    if player == LocalPlayer then return end
+
+    local head = player.Character and player.Character:FindFirstChild("Head")
+    if not head then return end
+
+    -- ลบของเก่า (ถ้ามี) เพื่อป้องกันบัค
+    if ESP_DistanceObjects[player] then
+        ESP_DistanceObjects[player].Bill:Destroy()
+        ESP_DistanceObjects[player] = nil
+    end
+
+    -- BillboardGui แบบเดิมของคุณ
+    local bill = Instance.new("BillboardGui")
+    bill.Name = "ESP_Distance"
+    bill.Adornee = head
+    bill.Size = UDim2.new(0, 13, 0, 9)
+    bill.StudsOffset = Vector3.new(0, -9, 0)
+    bill.AlwaysOnTop = true
+    bill.Parent = head
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 5
+    label.TextColor3 = Color3.new(1,1,1)
+    label.TextStrokeColor3 = Color3.new(0,0,0)
+    label.TextStrokeTransparency = 0
+    label.Text = ""
+    label.Size = UDim2.new(1,0,1,0)
+    label.TextScaled = true
+    label.TextWrapped = false
+    label.Parent = bill
+
+    ESP_DistanceObjects[player] = {Bill = bill, Label = label}
+end
+
+local function SafeUpdateESPDistance(player, data)
+    local char = player.Character
+    if not char then return end
+
+    local head = char:FindFirstChild("Head")
+    if not head then
+        -- ถ้าหัวหาย → รอเกิดใหม่แล้วสร้างใหม่
+        CreateESPDistance(player)
+        return
+    end
+
+    if not data.Bill or not data.Bill.Parent then
+        -- ถ้าป้ายหาย → สร้างใหม่ทันที
+        CreateESPDistance(player)
+        return
+    end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local lpChar = LocalPlayer.Character
+    local lpHRP = lpChar and lpChar:FindFirstChild("HumanoidRootPart")
+
+    if hrp and lpHRP then
+        local dist = math.floor((hrp.Position - lpHRP.Position).Magnitude)
+        data.Label.Text = "studs : " .. dist .. "m"
+    end
+end
+
+local function MaintainESPDistance()
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if not ESP_DistanceObjects[p] then
+                CreateESPDistance(p)
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not ESP_DistanceEnabled then return end
+
+    MaintainESPDistance()
+
+    for player, data in pairs(ESP_DistanceObjects) do
+        SafeUpdateESPDistance(player, data)
+    end
+end)
+
+EspTab:Toggle({
+    Title = "ESP Distance",
+    Icon = "circle-check",
+    Value = ESP_DistanceEnabled,
+    Callback = function(state)
+        ESP_DistanceEnabled = state
+        if not state then
+            for p, obj in pairs(ESP_DistanceObjects) do
+                obj.Bill:Destroy()
+            end
+            ESP_DistanceObjects = {}
+        end
+    end
+})
+
+-- ========================
+-- ESP Highlight (อัปเดตเรียลไทม์)
+-- ========================
+
+local ESPHighlightEnabled = false
+local ESPHighlightObjects = {}
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ฟังก์ชันสร้าง Highlight
+local function CreateHighlight(player)
+    if player == LocalPlayer then return end
+    if ESPHighlightObjects[player] then return end
+
+    local character = player.Character
+    if not character then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = character
+    highlight.FillColor = Color3.fromRGB(255, 165, 0) -- ส้ม
+    highlight.FillTransparency = 0.5
+    highlight.OutlineColor = Color3.fromRGB(255, 140, 0)
+    highlight.OutlineTransparency = 0
+    highlight.Parent = workspace
+
+    ESPHighlightObjects[player] = highlight
+end
+
+-- ฟังก์ชันลบ Highlight
+local function RemoveHighlight(player)
+    if ESPHighlightObjects[player] then
+        ESPHighlightObjects[player]:Destroy()
+        ESPHighlightObjects[player] = nil
+    end
+end
+
+-- อัปเดต Highlight ให้ทุกคน
+local function UpdateHighlights()
+    for _, player in pairs(Players:GetPlayers()) do
+        if ESPHighlightEnabled then
+            if not ESPHighlightObjects[player] then
+                CreateHighlight(player)
+            end
+        else
+            RemoveHighlight(player)
+        end
+    end
+
+    -- ลบผู้เล่นที่ออกเกมหรือไม่มีตัวละคร
+    for player, highlight in pairs(ESPHighlightObjects) do
+        if not player.Parent or not player.Character then
+            RemoveHighlight(player)
+        end
+    end
+end
+
+-- Event player เข้ามา
+Players.PlayerAdded:Connect(function(player)
+    task.wait(0.5)
+    if ESPHighlightEnabled then
+        CreateHighlight(player)
+    end
+end)
+
+-- Event player ออก
+Players.PlayerRemoving:Connect(function(player)
+    RemoveHighlight(player)
+end)
+
+-- อัปเดตทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if ESPHighlightEnabled then
+        UpdateHighlights()
+    end
+end)
+
+-- ====== UI Toggle ======
+EspTab:Toggle({
+    Title = "ESP Highlight",
+    Icon = "circle-check",
+    Value = ESPHighlightEnabled,
+    Callback = function(state)
+        ESPHighlightEnabled = state
+        if not state then
+            -- ปิดลบทุก Highlight
+            for player, _ in pairs(ESPHighlightObjects) do
+                RemoveHighlight(player)
+            end
+        else
+            UpdateHighlights()
+        end
+    end
+})
