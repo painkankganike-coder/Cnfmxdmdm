@@ -815,7 +815,7 @@ local function SetItemESP(state)
     end
 end
 
-ESPTab:Toggle({
+EspTab:Toggle({
     Title = "Esp Item",
     Icon = "circle-check",
     Value = ItemESP_Enabled,
