@@ -828,80 +828,56 @@ EspTab:Divider()
 
 EspTab:Section({Title="Dropped Items :"})
 
-local ESP_Items_Enabled = true
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-
 local lp = Players.LocalPlayer
+
 local DroppedItems = Workspace:WaitForChild("DroppedItems")
+local items = {}
+local ESPEnabled = true -- เริ่มต้นเปิด
 
-
-local SHOW_GUNS   = true   -- ปืนทั้ง 15 ชนิด (P226, AK47, RPG ฯลฯ)
-local SHOW_MONEY  = true   -- ไอเท็มชื่อ "Money"
-local SHOW_OTHERS = true   -- ของที่เหลือทั้งหมด (เช่น Medkit, Armor, Grenade ฯลฯ)
-
--- รายชื่อปืนทั้งหมด (ตรงตามที่คุณให้มา)
+-- รายชื่อ Gun ทั้งหมด
 local gunNames = {
     "P226", "MP5", "M24", "Draco", "Glock", "Sawnoff", "Uzi", "G3", "C9",
     "Hunting Rifle", "Anaconda", "AK47", "Remington", "Double Barrel", "RPG"
 }
 
-local items = {}
-
+-- ฟังก์ชันสีรุ้ง
 local function getRainbow()
     local t = tick() * 0.35
     return Color3.fromHSV(t % 1, 1, 1)
 end
 
-local function shouldShow(item)
-    local name = item.Name
-    local lower = name:lower()
-
-    -- ปืน
-    if SHOW_GUNS then
-        for _, gun in ipairs(gunNames) do
-            if lower == gun:lower() then
-                return true, "🔫"
-            end
-        end
+-- ฟังก์ชันเช็คไอเท็ม
+local function getItemIcon(item)
+    local name = item.Name:lower()
+    for _, gun in ipairs(gunNames) do
+        if name == gun:lower() then return "🔫" end
     end
-
-    -- เงิน
-    if SHOW_MONEY and name == "💵" then
-        return true, "Money"
-    end
-
-    -- ของอื่น ๆ
-    if SHOW_OTHERS then
-        return true, "⚙️"
-    end
-
-    return false -- ไม่แสดงเลย
+    if item.Name == "Money" then return "💵" end
+    return "⚙️"
 end
 
+-- สร้าง ESP สำหรับไอเท็ม
 local function createESP(item)
-    if items[item] then return end
-
-    local show, icon = shouldShow(item)
-    if not show then return end -- ไม่ต้องสร้างถ้าไม่เปิด
-
+    if not ESPEnabled or items[item] then return end
     local primary = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")) or item
     if not primary then return end
+    local iconText = getItemIcon(item)
 
-    -- Highlight รุ้ง
+    -- Highlight
     local hl = Instance.new("Highlight")
-    hl.FillTransparency = 1
+    hl.FillTransparency = 0 -- ไม่โปร่งใส
     hl.OutlineTransparency = 0
     hl.OutlineColor = Color3.new(1,1,1)
     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     hl.Parent = item
 
-    -- GUI เล็ก
+    -- GUI
     local bill = Instance.new("BillboardGui")
-    bill.Size = UDim2.new(0, 68, 0, 24)
-    bill.StudsOffset = Vector3.new(0, 1.8, 0)
+    bill.Size = UDim2.new(0, 50, 0, 20)
+    bill.StudsOffset = Vector3.new(0, 1.5, 0)
     bill.AlwaysOnTop = true
     bill.LightInfluence = 0
     bill.Adornee = primary
@@ -909,149 +885,65 @@ local function createESP(item)
 
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1,0,1,0)
-    frame.BackgroundTransparency = 0.4
-    frame.BackgroundColor3 = Color3.new(0,0,0)
+    frame.BackgroundTransparency = 0
+    frame.BackgroundColor3 = Color3.new(1,1,1) -- วงกลมขาว
     frame.BorderSizePixel = 0
     frame.Parent = bill
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 4)
+    corner.CornerRadius = UDim.new(1,0) -- วงกลม
     corner.Parent = frame
 
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.2
-    stroke.Transparency = 0
-    stroke.Color = Color3.new(1,1,1)
-    stroke.Parent = frame
-
-    -- ไอคอนตามประเภท
     local icon = Instance.new("TextLabel")
-    icon.Size = UDim2.new(0, 16, 0, 16)
-    icon.Position = UDim2.new(0, 4, 0.5, -8)
+    icon.Size = UDim2.new(1,0,1,0)
     icon.BackgroundTransparency = 1
-    icon.Text = icon
-    icon.TextSize =  = 14
+    icon.Text = iconText
+    icon.TextSize = 16
     icon.Font = Enum.Font.SourceSansBold
     icon.TextColor3 = Color3.new(1,1,1)
     icon.Parent = frame
 
-    -- ชื่อ + ระยะ
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(1, -24, 0.55, 0)
-    nameLabel.Position = UDim2.new(0, 22, 0, 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = name
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextSize = 6
-    nameLabel.TextColor3 = Color3.new(1,1,1)
-    nameLabel.TextStrokeTransparency = 0.3
-    nameLabel.TextStrokeColor3 = Color3.new(0,0,0)
-    nameLabel.Parent = frame
-
-    local distLabel = Instance.new("TextLabel")
-    distLabel.Size = UDim2.new(1, -24, 0.45, 0)
-    distLabel.Position = UDim2.new(0, 22, 0.55, 0)
-    distLabel.BackgroundTransparency = 1
-    distLabel.TextColor3 = Color3.new(0.8,0.8,0.8)
-    distLabel.Font = Enum.Font.Gotham
-    distLabel.TextSize = 5
-    distLabel.TextXAlignment = Enum.TextXAlignment.Left
-    distLabel.Parent = frame
-
-    items[item] = {
-        hl = hl, stroke = stroke, icon = icon,
-        nameLabel = nameLabel, distLabel = distLabel, primary = primary
-    }
+    items[item] = {hl = hl, icon = icon, frame = frame, primary = primary}
 end
 
 local function removeESP(item)
     if items[item] then
         if items[item].hl then items[item].hl:Destroy() end
-        if items[item].nameLabel and items[item].nameLabel.Parent then items[item].nameLabel.Parent.Parent:Destroy() end
+        if items[item].frame and items[item].frame.Parent then items[item].frame.Parent:Destroy() end
         items[item] = nil
     end
 end
 
-for _, v in ipairs(DroppedItems:GetChildren()) do task.spawn(createESP, v) end
+for _, v in ipairs(DroppedItems:GetChildren()) do createESP(v) end
 DroppedItems.ChildAdded:Connect(function(c) task.wait(0.1); createESP(c) end)
 DroppedItems.ChildRemoved:Connect(removeESP)
 
+-- อัปเดตสีรุ้ง
 RunService.Heartbeat:Connect(function()
+    if not ESPEnabled then return end
     local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
     local rainbow = getRainbow()
-
     for item, data in pairs(items) do
         if item.Parent and data.primary.Parent then
             data.hl.OutlineColor = rainbow
-            data.stroke.Color = rainbow
             data.icon.TextColor3 = rainbow
-            local dist = math.floor((root.Position - data.primary.Position).Magnitude)
-            data.distLabel.Text = dist.." studs"
         else
             removeESP(item)
         end
     end
 end)
 
-
-
 EspTab:Toggle({
-    Title = "DroppedI tems",
+    Title = "Dropped Items",
     Icon = "circle-check",
-    Value = ESP_Items_Enabled,
+    Value = ESPEnabled,
     Callback = function(state)
-        ESP_Items_Enabled = state
-
-        -- ซ่อนทั้งหมดถ้าปิด
+        ESPEnabled = state
         if not state then
-            for _, data in pairs(items) do
-                if data.hl then data.hl.Enabled = false end
-                if data.nameLabel and data.nameLabel.Parent then
-                    data.nameLabel.Parent.Parent.Enabled = false
-                end
-            end
+            for item, _ in pairs(items) do removeESP(item) end
         else
-            -- เปิดใหม่
-            for _, data in pairs(items) do
-                if data.hl then data.hl.Enabled = true end
-                if data.nameLabel and data.nameLabel.Parent then
-                    data.nameLabel.Parent.Parent.Enabled = true
-                end
-            end
+            for _, v in ipairs(DroppedItems:GetChildren()) do createESP(v) end
         end
     end
-})
-
-EspTab:Dropdown({
-    Title = "item :",
-    Values = { "Guns", "Money", "Others" },
-    Value = { "Guns" },
-    Multi = true,
-    AllowNone = true,
-
-    Callback = function(selected)
-        -- ปิดทั้งหมดก่อน
-        SHOW_GUNS   = false
-        SHOW_MONEY  = false
-        SHOW_OTHERS = false
-
-        -- เปิดเฉพาะหมวดที่เลือก
-        for _, opt in ipairs(selected) do
-            if opt == "Guns" then
-                SHOW_GUNS = true
-            elseif opt == "Money" then
-                SHOW_MONEY = true
-            elseif opt == "Others" then
-                SHOW_OTHERS = true
-            end
-        end
-
-        -- รีเฟรช ESP ที่มีอยู่
-        for item in pairs(items) do
-            removeESP(item)
-            task.wait()
-            createESP(item)
-        end
 })
