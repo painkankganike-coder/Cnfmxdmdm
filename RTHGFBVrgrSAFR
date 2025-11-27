@@ -807,7 +807,8 @@ EspTab:Divider()
 
 EspTab:Section({Title="Dropped Items :"})
 
--- Ultimate Smart Emoji Icon Rainbow ESP + Toggle แยกประเภท
+
+-- Ultimate Smart Emoji Icon Rainbow ESP + WindUi Toggle
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -817,7 +818,6 @@ local DroppedItems = Workspace:WaitForChild("DroppedItems")
 
 local items = {}
 local ESPEnabled = false -- เริ่มต้นปิด
-local SHOW_GUNS, SHOW_MONEY, SHOW_OTHERS = false, false, false -- เริ่มต้นปิดทั้งหมด
 
 -- รายชื่อ Gun ทั้งหมด (case insensitive)
 local gunNames = {
@@ -839,27 +839,9 @@ local function getItemIcon(item)
     return "⚙️"
 end
 
-local function shouldShow(item)
-    local name = item.Name:lower()
-    if SHOW_GUNS then
-        for _, gun in ipairs(gunNames) do
-            if name == gun:lower() then return true end
-        end
-    end
-    if SHOW_MONEY and item.Name == "Money" then return true end
-    if SHOW_OTHERS and item.Name ~= "Money" then
-        local isGun = false
-        for _, gun in ipairs(gunNames) do
-            if name == gun:lower() then isGun = true break end
-        end
-        if not isGun then return true end
-    end
-    return false
-end
-
 -- สร้าง ESP
 local function createESP(item)
-    if items[item] or not ESPEnabled or not shouldShow(item) then return end
+    if items[item] or not ESPEnabled then return end
     local primary = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")) or item
     if not primary then return end
     local iconText = getItemIcon(item)
@@ -931,32 +913,32 @@ local function createESP(item)
     distLabel.Parent = frame
 
     items[item] = {
-        hl = hl, stroke = stroke, icon = icon,
-        nameLabel = nameLabel, distLabel = distLabel, primary = primary
+        hl = hl,
+        stroke = stroke,
+        icon = icon,
+        nameLabel = nameLabel,
+        distLabel = distLabel,
+        primary = primary
     }
+end
+
+-- ลบ ESP ของไอเท็ม
+local function removeESP(item)
+    if items[item] then
+        if items[item].hl then items[item].hl:Destroy() end
+        if items[item].nameLabel and items[item].nameLabel.Parent then
+            items[item].nameLabel.Parent.Parent:Destroy()
+        end
+        items[item] = nil
+    end
 end
 
 -- ลบ ESP ทั้งหมด
 local function removeAllESP()
-    for item, data in pairs(items) do
-        if data.hl then data.hl:Destroy() end
-        if data.nameLabel and data.nameLabel.Parent then data.nameLabel.Parent.Parent:Destroy() end
+    for item, _ in pairs(items) do
+        removeESP(item)
     end
-    items = {}
 end
-
--- ปรับ ESP ของไอเท็มใหม่
-DroppedItems.ChildAdded:Connect(function(child)
-    task.wait(0.1)
-    createESP(child)
-end)
-DroppedItems.ChildRemoved:Connect(function(child)
-    if items[child] then
-        if items[child].hl then items[child].hl:Destroy() end
-        if items[child].nameLabel and items[child].nameLabel.Parent then items[child].nameLabel.Parent.Parent:Destroy() end
-        items[child] = nil
-    end
-end)
 
 -- อัพเดทสีรุ้ง + ระยะ
 RunService.Heartbeat:Connect(function()
@@ -972,42 +954,26 @@ RunService.Heartbeat:Connect(function()
             local dist = math.floor((root.Position - data.primary.Position).Magnitude)
             data.distLabel.Text = dist .. " studs"
         else
-            if items[item] then
-                if data.hl then data.hl:Destroy() end
-                if data.nameLabel and data.nameLabel.Parent then data.nameLabel.Parent.Parent:Destroy() end
-                items[item] = nil
-            end
+            removeESP(item)
         end
     end
 end)
 
--- WindUi ปุ่มเปิด/ปิดหลัก
+-- เพิ่มการสร้าง ESP ของไอเท็มใหม่
+DroppedItems.ChildAdded:Connect(function(child)
+    task.wait(0.1)
+    createESP(child)
+end)
+DroppedItems.ChildRemoved:Connect(removeESP)
+
+-- ==== WindUi ปุ่มเปิด/ปิด ESP ====
+-- สมมติว่า ESPTab คือหน้าต่างของคุณ
 EspTab:Toggle({
-    Title = "Dropped Items",
-    Icon = "circle-check",,
+    Title = "Smart Emoji ESP",
+    Desc = "เปิด/ปิด Smart Emoji Icon Rainbow ESP",
     Value = ESPEnabled,
     Callback = function(state)
         ESPEnabled = state
-        removeAllESP()
-        if ESPEnabled then
-            for _, item in ipairs(DroppedItems:GetChildren()) do
-                createESP(item)
-            end
-        end
-    end
-})
-
--- WindUi ปุ่ม Toggle แยกประเภท
-EspTab:Dropdown({
-    Title = "Item Categories",
-    Values = { "Gun", "Money", "Other" },
-    Value = {},
-    Multi = true,
-    AllowNone = true,
-    Callback = function(selection)
-        SHOW_GUNS = table.find(selection, "Gun") ~= nil
-        SHOW_MONEY = table.find(selection, "Money") ~= nil
-        SHOW_OTHERS = table.find(selection, "Other") ~= nil
         removeAllESP()
         if ESPEnabled then
             for _, item in ipairs(DroppedItems:GetChildren()) do
