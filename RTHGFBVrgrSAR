@@ -573,8 +573,7 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
-
-                        local ItemESP_Enabled = false -- เริ่มต้นปิด
+local ItemESP_Enabled = false -- เริ่มต้นปิด
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
