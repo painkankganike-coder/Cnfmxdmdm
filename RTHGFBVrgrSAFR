@@ -579,12 +579,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContentProvider = game:GetService("ContentProvider")
 
 local LocalPlayer = Players.LocalPlayer
-local ItemESP_Enabled = false -- เริ่มต้นปิด
+
+-- ค่าเริ่มต้น: ปิด ESP
+local ItemESP_Enabled = false
+
 local BillboardCache = {}
 local ItemESP_UpdateConnections = {}
 local WeaponDB = {}
 local PreloadedImages = {}
-
 local RARITY_COLORS = {
     ["Common"] = Color3.fromRGB(255, 255, 255),
     ["Uncommon"] = Color3.fromRGB(99, 255, 52),
@@ -597,16 +599,15 @@ local RARITY_COLORS = {
 local function generateUniqueKey(tool)
     if not tool or not tool:IsA("Tool") then return nil end
     local itemId = tool:GetAttribute("ItemId") or tool:GetAttribute("Id")
-    if itemId and itemId ~= "" then
-        return "ITEMID_" .. tostring(itemId)
-    end
+    if itemId and itemId ~= "" then return "ITEMID_"..tostring(itemId) end
+
     local partsData = {}
     for _, part in ipairs(tool:GetDescendants()) do
-        if part:IsA("SpecialMesh") and part.MeshId and part.MeshId ~= "" and part.MeshId ~= "rbxassetid://" then
+        if part:IsA("SpecialMesh") and part.MeshId and part.MeshId ~= "" then
             table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureId or "NOTEX"))
-        elseif part:IsA("MeshPart") and part.MeshId and part.MeshId ~= "" and part.MeshId ~= "rbxassetid://" then
+        elseif part:IsA("MeshPart") and part.MeshId and part.MeshId ~= "" then
             table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureID or "NOTEX"))
-        elseif part:IsA("Decal") and part.Texture and part.Texture ~= "" and part.Texture ~= "rbxassetid://" then
+        elseif part:IsA("Decal") and part.Texture and part.Texture ~= "" then
             table.insert(partsData, "DECAL_"..part.Texture)
         elseif part:IsA("Part") then
             table.insert(partsData, "PART_"..part.Name.."_"..part.Size.X.."x"..part.Size.Y.."x"..part.Size.Z)
@@ -614,13 +615,14 @@ local function generateUniqueKey(tool)
     end
     if #partsData > 0 then
         table.sort(partsData)
-        return "MESHKEY_" .. table.concat(partsData, ";")
+        return "MESHKEY_"..table.concat(partsData,";")
     end
+
     local displayName = tool:GetAttribute("DisplayName") or tool.Name
     local toolName = tool.Name
     local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
     local imageId = tool:GetAttribute("ImageId") or "NOIMAGE"
-    return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
+    return "NAME_"..displayName.."_"..toolName.."_"..rarity.."_"..imageId
 end
 
 local function registerItems(folder)
@@ -628,19 +630,26 @@ local function registerItems(folder)
         if not tool:IsA("Tool") then continue end
         local key = generateUniqueKey(tool)
         if not key then continue end
+
         local displayName = tool:GetAttribute("DisplayName") or tool.Name
         local imageId = tool:GetAttribute("ImageId") or "rbxassetid://7072725737"
         local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
-        WeaponDB[key] = {Name = displayName, Rarity = rarity, ImageId = imageId, ToolName = tool.Name, Key = key}
+
+        WeaponDB[key] = {Name=displayName, Rarity=rarity, ImageId=imageId, ToolName=tool.Name, Key=key}
+
+        -- Preload Image
         if imageId and imageId ~= "" and not PreloadedImages[imageId] then
             PreloadedImages[imageId] = true
-            task.spawn(function() pcall(function() ContentProvider:PreloadAsync({imageId}) end) end)
+            task.spawn(function()
+                pcall(function() ContentProvider:PreloadAsync({imageId}) end)
+            end)
         end
     end
 end
 
+-- ลงทะเบียนอัตโนมัติ
 pcall(function()
-    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 5)
+    local itemsFolder = ReplicatedStorage:WaitForChild("Items",5)
     if itemsFolder then registerItems(itemsFolder) end
     for _, obj in ipairs(ReplicatedStorage:GetChildren()) do
         if obj:IsA("Folder") and (obj.Name:find("Weapon") or obj.Name:find("Item") or obj.Name:find("Tool")) then
@@ -683,36 +692,33 @@ local function createBillboardForPlayer(player)
 
         container:ClearAllChildren()
         local layout = Instance.new("UIGridLayout")
-        layout.CellSize = UDim2.new(0,35,0,35)
-        layout.CellPadding = UDim2.new(0,6,0,0)
+        layout.CellSize = UDim2.new(0, 30, 0, 30)
+        layout.CellPadding = UDim2.new(0,4,0,0)
         layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
         layout.VerticalAlignment = Enum.VerticalAlignment.Center
         layout.SortOrder = Enum.SortOrder.LayoutOrder
         layout.Parent = container
 
         for i, info in ipairs(currentTools) do
-            local bgFrame = Instance.new("Frame")
-            bgFrame.Size = UDim2.new(0,35,0,35)
-            bgFrame.BackgroundColor3 = Color3.new(1,1,1)
-            bgFrame.BackgroundTransparency = 0
-            bgFrame.Parent = container
-
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0.5,0)
-            corner.Parent = bgFrame
-
-            local stroke = Instance.new("UIStroke")
-            stroke.Thickness = 2
-            stroke.Color = RARITY_COLORS[info.Rarity] or Color3.new(1,1,1)
-            stroke.Parent = bgFrame
+            local circle = Instance.new("Frame") -- วงกลมข้างหลัง
+            circle.Size = UDim2.new(0, 28, 0, 28)
+            circle.Position = UDim2.new(0,0,0,0)
+            circle.AnchorPoint = Vector2.new(0,0)
+            circle.BackgroundColor3 = RARITY_COLORS[info.Rarity] or Color3.new(1,1,1)
+            circle.BorderColor3 = Color3.new(1,1,1) -- ขอบสีขาว
+            circle.BorderSizePixel = 2
+            circle.BackgroundTransparency = 0
+            circle.Parent = container
+            circle.ZIndex = 1
 
             local img = Instance.new("ImageLabel")
-            img.Parent = bgFrame
-            img.Size = UDim2.new(0.8,0,0.8,0)
-            img.Position = UDim2.new(0.1,0,0.1,0)
+            img.Parent = container
+            img.Size = UDim2.new(0,28,0,28)
+            img.Position = UDim2.new(0,0,0,0)
             img.BackgroundTransparency = 1
             img.Image = info.ImageId or "rbxassetid://7072725737"
             img.ScaleType = Enum.ScaleType.Fit
+            img.ZIndex = 2
         end
     end
 
@@ -722,12 +728,8 @@ local function createBillboardForPlayer(player)
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        if BillboardCache[player] then
-            BillboardCache[player]:Destroy()
-        end
-        for _, conn in pairs(connections) do
-            if conn.Connected then conn:Disconnect() end
-        end
+        if BillboardCache[player] then BillboardCache[player]:Destroy() end
+        for _, conn in pairs(connections) do if conn.Connected then conn:Disconnect() end end
         connections = {}
 
         billboard = Instance.new("BillboardGui")
@@ -752,20 +754,8 @@ local function createBillboardForPlayer(player)
             table.insert(connections, backpack.ChildRemoved:Connect(updateESP))
         end
 
-        table.insert(connections, char.ChildAdded:Connect(function(child)
-            if child:IsA("Tool") then task.defer(updateESP) end
-        end))
-        table.insert(connections, char.ChildRemoved:Connect(function(child)
-            if child:IsA("Tool") then task.defer(updateESP) end
-        end))
-        table.insert(connections, player.ChildAdded:Connect(function(child)
-            if child.Name == "Backpack" then
-                task.wait()
-                table.insert(connections, child.ChildAdded:Connect(updateESP))
-                table.insert(connections, child.ChildRemoved:Connect(updateESP))
-                updateESP()
-            end
-        end))
+        table.insert(connections, char.ChildAdded:Connect(function(child) if child:IsA("Tool") then task.defer(updateESP) end end))
+        table.insert(connections, char.ChildRemoved:Connect(function(child) if child:IsA("Tool") then task.defer(updateESP) end end))
     end
 
     if player.Character then task.spawn(setupBillboard) end
@@ -773,35 +763,45 @@ local function createBillboardForPlayer(player)
     ItemESP_UpdateConnections[player] = connections
 end
 
-for _, p in ipairs(Players:GetPlayers()) do
-    if p ~= LocalPlayer then createBillboardForPlayer(p) end
-end
-
-Players.PlayerAdded:Connect(function(p)
-    if p ~= LocalPlayer then createBillboardForPlayer(p) end
-end)
-
+-- สร้าง Billboard ให้ผู้เล่นทุกคน
+for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then createBillboardForPlayer(p) end end
+Players.PlayerAdded:Connect(function(p) if p ~= LocalPlayer then createBillboardForPlayer(p) end end)
 Players.PlayerRemoving:Connect(function(p)
-    if BillboardCache[p] then
-        BillboardCache[p]:Destroy()
-        BillboardCache[p] = nil
-    end
+    if BillboardCache[p] then BillboardCache[p]:Destroy(); BillboardCache[p]=nil end
     if ItemESP_UpdateConnections[p] then
-        for _, conn in pairs(ItemESP_UpdateConnections[p]) do
-            if conn.Connected then conn:Disconnect() end
-        end
+        for _, conn in pairs(ItemESP_UpdateConnections[p]) do if conn.Connected then conn:Disconnect() end end
         ItemESP_UpdateConnections[p] = nil
     end
 end)
 
-EspTab:Toggle({
-    Title = "Esp Item",
+-- ปุ่มเปิดปิด WindUI
+ESPTab:Toggle({
+    Title = "Item ESP",
     Icon = "circle-check",
     Value = ItemESP_Enabled,
     Callback = function(state)
-        SetItemESP(state)
+        ItemESP_Enabled = state
+        if state then
+            -- เปิด: สร้าง Billboard ใหม่ทั้งหมด
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then createBillboardForPlayer(p) end
+            end
+        else
+            -- ปิด: ลบ Billboard ทั้งหมด
+            for p, billboard in pairs(BillboardCache) do
+                if billboard then billboard:Destroy() end
+            end
+            BillboardCache = {}
+            for player, conns in pairs(ItemESP_UpdateConnections) do
+                for _, conn in pairs(conns) do
+                    if conn.Connected then conn:Disconnect() end
+                end
+                ItemESP_UpdateConnections[player] = nil
+            end
+        end
     end
 })
+
 
 EspTab:Divider()
 
