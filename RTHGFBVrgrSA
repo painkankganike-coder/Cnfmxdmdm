@@ -574,7 +574,7 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 
-local ItemESP_Enabled = false -- เริ่มเปิด
+                        local ItemESP_Enabled = false -- เริ่มต้นปิด
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -582,7 +582,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContentProvider = game:GetService("ContentProvider")
 
 local LocalPlayer = Players.LocalPlayer
-local ItemESP_Enabled = true
 local BillboardCache = {}
 local ItemESP_UpdateConnections = {}
 local WeaponDB = {}
@@ -805,16 +804,38 @@ Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
--- ฟังก์ชันเปิด/ปิด Item ESP
+-- ฟังก์ชันเปิด/ปิด Item ESP (ลบทั้งหมดตอนปิด)
 local function SetItemESP(state)
     ItemESP_Enabled = state
-    for player, billboard in pairs(BillboardCache) do
-        if billboard and billboard.Parent then
-            billboard.Visible = state
+
+    if not state then
+        -- ลบทุก Billboard และ disconnect connections
+        for player, billboard in pairs(BillboardCache) do
+            if billboard and billboard.Parent then
+                billboard:Destroy()
+            end
+            BillboardCache[player] = nil
+
+            if ItemESP_UpdateConnections[player] then
+                for _, conn in pairs(ItemESP_UpdateConnections[player]) do
+                    if conn.Connected then
+                        conn:Disconnect()
+                    end
+                end
+                ItemESP_UpdateConnections[player] = nil
+            end
+        end
+    else
+        -- สร้างใหม่สำหรับผู้เล่นทุกคน
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                createBillboardForPlayer(p)
+            end
         end
     end
 end
 
+-- ตัวอย่างเชื่อมกับปุ่ม Toggle ของ UI
 EspTab:Toggle({
     Title = "Esp Item",
     Icon = "circle-check",
@@ -828,54 +849,62 @@ EspTab:Divider()
 
 EspTab:Section({Title="Dropped Items :"})
 
+-- Ultimate Smart Emoji Icon Rainbow ESP + Toggle แยกประเภท
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local lp = Players.LocalPlayer
 local DroppedItems = Workspace:WaitForChild("DroppedItems")
+
 local items = {}
+local ESPEnabled = false -- เริ่มต้นปิด
+local SHOW_GUNS, SHOW_MONEY, SHOW_OTHERS = false, false, false -- เริ่มต้นปิดทั้งหมด
 
--- เริ่มต้นเปิด/ปิดประเภทไอเท็ม
-local SHOW_GUNS   = false
-local SHOW_MONEY  = false
-local SHOW_OTHERS = false
-
--- รายชื่อปืน
+-- รายชื่อ Gun ทั้งหมด (case insensitive)
 local gunNames = {
     "P226", "MP5", "M24", "Draco", "Glock", "Sawnoff", "Uzi", "G3", "C9",
     "Hunting Rifle", "Anaconda", "AK47", "Remington", "Double Barrel", "RPG"
 }
 
--- สีรุ้ง
 local function getRainbow()
     local t = tick() * 0.35
     return Color3.fromHSV(t % 1, 1, 1)
 end
 
--- ตรวจสอบไอเท็มว่าจะแสดงหรือไม่
-local function shouldShow(item)
-    local name = item.Name
-    local lower = name:lower()
+local function getItemIcon(item)
+    local name = item.Name:lower()
+    for _, gun in ipairs(gunNames) do
+        if name == gun:lower() then return "🔫" end
+    end
+    if item.Name == "Money" then return "💵" end
+    return "⚙️"
+end
 
+local function shouldShow(item)
+    local name = item.Name:lower()
     if SHOW_GUNS then
         for _, gun in ipairs(gunNames) do
-            if lower == gun:lower() then
-                return true
-            end
+            if name == gun:lower() then return true end
         end
     end
-    if SHOW_MONEY and name == "Money" then return true end
-    if SHOW_OTHERS then return true end
+    if SHOW_MONEY and item.Name == "Money" then return true end
+    if SHOW_OTHERS and item.Name ~= "Money" then
+        local isGun = false
+        for _, gun in ipairs(gunNames) do
+            if name == gun:lower() then isGun = true break end
+        end
+        if not isGun then return true end
+    end
     return false
 end
 
 -- สร้าง ESP
 local function createESP(item)
-    if items[item] or not shouldShow(item) then return end
-
+    if items[item] or not ESPEnabled or not shouldShow(item) then return end
     local primary = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")) or item
     if not primary then return end
+    local iconText = getItemIcon(item)
 
     local hl = Instance.new("Highlight")
     hl.FillTransparency = 1
@@ -910,18 +939,18 @@ local function createESP(item)
     stroke.Parent = frame
 
     local icon = Instance.new("TextLabel")
-    icon.Size = UDim2.new(0,16,0,16)
-    icon.Position = UDim2.new(0,4,0.5,-8)
+    icon.Size = UDim2.new(0, 16, 0, 16)
+    icon.Position = UDim2.new(0, 4, 0.5, -8)
     icon.BackgroundTransparency = 1
-    icon.Text = "🛠️"
+    icon.Text = iconText
     icon.TextSize = 14
     icon.Font = Enum.Font.SourceSansBold
     icon.TextColor3 = Color3.new(1,1,1)
     icon.Parent = frame
 
     local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(1,-24,0.55,0)
-    nameLabel.Position = UDim2.new(0,22,0,0)
+    nameLabel.Size = UDim2.new(1, -24, 0.55, 0)
+    nameLabel.Position = UDim2.new(0, 22, 0, 0)
     nameLabel.BackgroundTransparency = 1
     nameLabel.Text = item.Name
     nameLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -933,33 +962,47 @@ local function createESP(item)
     nameLabel.Parent = frame
 
     local distLabel = Instance.new("TextLabel")
-    distLabel.Size = UDim2.new(1,-24,0.45,0)
-    distLabel.Position = UDim2.new(0,22,0.55,0)
+    distLabel.Size = UDim2.new(1, -24, 0.45, 0)
+    distLabel.Position = UDim2.new(0, 22, 0.55, 0)
     distLabel.BackgroundTransparency = 1
+    distLabel.Text = "0 studs"
     distLabel.TextColor3 = Color3.new(0.8,0.8,0.8)
     distLabel.Font = Enum.Font.Gotham
     distLabel.TextSize = 5
     distLabel.TextXAlignment = Enum.TextXAlignment.Left
     distLabel.Parent = frame
 
-    items[item] = {hl=hl, stroke=stroke, icon=icon, nameLabel=nameLabel, distLabel=distLabel, primary=primary}
+    items[item] = {
+        hl = hl, stroke = stroke, icon = icon,
+        nameLabel = nameLabel, distLabel = distLabel, primary = primary
+    }
 end
 
-local function removeESP(item)
-    if items[item] then
-        if items[item].hl then items[item].hl:Destroy() end
-        if items[item].nameLabel and items[item].nameLabel.Parent then items[item].nameLabel.Parent.Parent:Destroy() end
-        items[item] = nil
+-- ลบ ESP ทั้งหมด
+local function removeAllESP()
+    for item, data in pairs(items) do
+        if data.hl then data.hl:Destroy() end
+        if data.nameLabel and data.nameLabel.Parent then data.nameLabel.Parent.Parent:Destroy() end
     end
+    items = {}
 end
 
--- สร้าง ESP ของไอเท็มที่มีอยู่
-for _, v in ipairs(DroppedItems:GetChildren()) do createESP(v) end
-DroppedItems.ChildAdded:Connect(function(c) task.wait(0.1); createESP(c) end)
-DroppedItems.ChildRemoved:Connect(removeESP)
+-- ปรับ ESP ของไอเท็มใหม่
+DroppedItems.ChildAdded:Connect(function(child)
+    task.wait(0.1)
+    createESP(child)
+end)
+DroppedItems.ChildRemoved:Connect(function(child)
+    if items[child] then
+        if items[child].hl then items[child].hl:Destroy() end
+        if items[child].nameLabel and items[child].nameLabel.Parent then items[child].nameLabel.Parent.Parent:Destroy() end
+        items[child] = nil
+    end
+end)
 
--- อัปเดตสีรุ้งและระยะ
+-- อัพเดทสีรุ้ง + ระยะ
 RunService.Heartbeat:Connect(function()
+    if not ESPEnabled then return end
     local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
     local rainbow = getRainbow()
@@ -969,38 +1012,51 @@ RunService.Heartbeat:Connect(function()
             data.stroke.Color = rainbow
             data.icon.TextColor3 = rainbow
             local dist = math.floor((root.Position - data.primary.Position).Magnitude)
-            data.distLabel.Text = dist.." studs"
+            data.distLabel.Text = dist .. " studs"
         else
-            removeESP(item)
+            if items[item] then
+                if data.hl then data.hl:Destroy() end
+                if data.nameLabel and data.nameLabel.Parent then data.nameLabel.Parent.Parent:Destroy() end
+                items[item] = nil
+            end
         end
     end
 end)
 
--- WindUI ปุ่มเปิด/ปิด + สลับประเภท
+-- WindUi ปุ่มเปิด/ปิดหลัก
 EspTab:Toggle({
     Title = "Dropped Items",
-    Icon = "circle-check",
-    Value = true,
+    Icon = "circle-check",,
+    Value = ESPEnabled,
     Callback = function(state)
-        if not state then
-            for item,_ in pairs(items) do removeESP(item) end
-        else
-            for _, v in ipairs(DroppedItems:GetChildren()) do createESP(v) end
+        ESPEnabled = state
+        removeAllESP()
+        if ESPEnabled then
+            for _, item in ipairs(DroppedItems:GetChildren()) do
+                createESP(item)
+            end
         end
     end
 })
 
+-- WindUi ปุ่ม Toggle แยกประเภท
 EspTab:Dropdown({
-    Title = "item :",
-    Values = {"Gun", "Money", "Other"},
-    Value = {"Gun", "Money", "Other"},
+    Title = "Item Categories",
+    Values = { "Gun", "Money", "Other" },
+    Value = {},
     Multi = true,
     AllowNone = true,
-    Callback = function(option)
-        SHOW_GUNS = table.find(option,"Gun") and true or false
-        SHOW_MONEY = table.find(option,"Money") and true or false
-        SHOW_OTHERS = table.find(option,"Other") and true or false
-        for item,_ in pairs(items) do removeESP(item) end
-        for _, v in ipairs(DroppedItems:GetChildren()) do createESP(v) end
+    Callback = function(selection)
+        SHOW_GUNS = table.find(selection, "Gun") ~= nil
+        SHOW_MONEY = table.find(selection, "Money") ~= nil
+        SHOW_OTHERS = table.find(selection, "Other") ~= nil
+        removeAllESP()
+        if ESPEnabled then
+            for _, item in ipairs(DroppedItems:GetChildren()) do
+                createESP(item)
+            end
+        end
     end
 })
+
+print("Smart Emoji Icon Rainbow ESP พร้อมใช้งาน (เริ่มต้นปิด)")
