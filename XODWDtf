@@ -1060,7 +1060,7 @@ EspTab:Divider()
 
 EspTab:Section({Title="Dropped Items :"})
 
-local ESP_Items_Enabled = true
+local ESP_Items_Enabled = false
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -1255,34 +1255,3 @@ EspTab:Toggle({
         end
     end
 })
-
-EspTab:Dropdown({
-    Title = "item :",
-    Values = { "Guns", "Money", "Others" },
-    Value = { "Guns" },
-    Multi = true,
-    AllowNone = true,
-
-    Callback = function(selected)
-        -- ปิดทั้งหมดก่อน
-        SHOW_GUNS   = false
-        SHOW_MONEY  = false
-        SHOW_OTHERS = false
-
-        -- เปิดเฉพาะหมวดที่เลือก
-        for _, opt in ipairs(selected) do
-            if opt == "Guns" then
-                SHOW_GUNS = true
-            elseif opt == "Money" then
-                SHOW_MONEY = true
-            elseif opt == "Others" then
-                SHOW_OTHERS = true
-            end
-        end
-
-        -- รีเฟรช ESP ที่มีอยู่
-        for item in pairs(items) do
-            removeESP(item)
-            task.wait()
-            createESP(item)
-        end
