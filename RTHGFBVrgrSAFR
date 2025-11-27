@@ -573,14 +573,13 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
-local ItemESP_Enabled = false -- เริ่มต้นปิด
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContentProvider = game:GetService("ContentProvider")
 
 local LocalPlayer = Players.LocalPlayer
+local ItemESP_Enabled = false -- เริ่มต้นปิด
 local BillboardCache = {}
 local ItemESP_UpdateConnections = {}
 local WeaponDB = {}
@@ -595,7 +594,6 @@ local RARITY_COLORS = {
     ["Omega"] = Color3.fromRGB(255, 20, 51),
 }
 
--- สร้าง Unique Key สำหรับไอเท็ม
 local function generateUniqueKey(tool)
     if not tool or not tool:IsA("Tool") then return nil end
     local itemId = tool:GetAttribute("ItemId") or tool:GetAttribute("Id")
@@ -625,7 +623,6 @@ local function generateUniqueKey(tool)
     return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
 end
 
--- ลงทะเบียนไอเท็มทั้งหมด
 local function registerItems(folder)
     for _, tool in ipairs(folder:GetDescendants()) do
         if not tool:IsA("Tool") then continue end
@@ -642,7 +639,6 @@ local function registerItems(folder)
     end
 end
 
--- ลงทะเบียนไอเท็มจาก ReplicatedStorage
 pcall(function()
     local itemsFolder = ReplicatedStorage:WaitForChild("Items", 5)
     if itemsFolder then registerItems(itemsFolder) end
@@ -660,7 +656,6 @@ local function getWeaponInfo(tool)
     return WeaponDB[key]
 end
 
--- สร้าง Billboard GUI สำหรับผู้เล่น
 local function createBillboardForPlayer(player)
     if player == LocalPlayer or BillboardCache[player] then return end
     local billboard, container
@@ -696,7 +691,6 @@ local function createBillboardForPlayer(player)
         layout.Parent = container
 
         for i, info in ipairs(currentTools) do
-            -- วงกลมสีขาวพื้นหลัง
             local bgFrame = Instance.new("Frame")
             bgFrame.Size = UDim2.new(0,35,0,35)
             bgFrame.BackgroundColor3 = Color3.new(1,1,1)
@@ -707,13 +701,11 @@ local function createBillboardForPlayer(player)
             corner.CornerRadius = UDim.new(0.5,0)
             corner.Parent = bgFrame
 
-            -- ขอบวงกลมตาม Rarity
             local stroke = Instance.new("UIStroke")
             stroke.Thickness = 2
             stroke.Color = RARITY_COLORS[info.Rarity] or Color3.new(1,1,1)
             stroke.Parent = bgFrame
 
-            -- ImageLabel ไอเท็มอยู่ข้างหน้า
             local img = Instance.new("ImageLabel")
             img.Parent = bgFrame
             img.Size = UDim2.new(0.8,0,0.8,0)
@@ -781,7 +773,6 @@ local function createBillboardForPlayer(player)
     ItemESP_UpdateConnections[player] = connections
 end
 
--- สร้าง ESP ให้ผู้เล่นทุกคน
 for _, p in ipairs(Players:GetPlayers()) do
     if p ~= LocalPlayer then createBillboardForPlayer(p) end
 end
@@ -803,38 +794,6 @@ Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
--- ฟังก์ชันเปิด/ปิด Item ESP (ลบทั้งหมดตอนปิด)
-local function SetItemESP(state)
-    ItemESP_Enabled = state
-
-    if not state then
-        -- ลบทุก Billboard และ disconnect connections
-        for player, billboard in pairs(BillboardCache) do
-            if billboard and billboard.Parent then
-                billboard:Destroy()
-            end
-            BillboardCache[player] = nil
-
-            if ItemESP_UpdateConnections[player] then
-                for _, conn in pairs(ItemESP_UpdateConnections[player]) do
-                    if conn.Connected then
-                        conn:Disconnect()
-                    end
-                end
-                ItemESP_UpdateConnections[player] = nil
-            end
-        end
-    else
-        -- สร้างใหม่สำหรับผู้เล่นทุกคน
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer then
-                createBillboardForPlayer(p)
-            end
-        end
-    end
-end
-
--- ตัวอย่างเชื่อมกับปุ่ม Toggle ของ UI
 EspTab:Toggle({
     Title = "Esp Item",
     Icon = "circle-check",
