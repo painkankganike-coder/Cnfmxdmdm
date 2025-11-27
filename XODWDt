@@ -1259,7 +1259,7 @@ EspTab:Toggle({
 EspTab:Dropdown({
     Title = "item :",
     Values = { "Guns", "Money", "Others" },
-    Value = { "Guns", "Money", "Others" },
+    Value = { "Guns" },
     Multi = true,
     AllowNone = true,
 
