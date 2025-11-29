@@ -1,0 +1,71 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local rootPart = char:WaitForChild("HumanoidRootPart")
+
+
+-- หา CounterTable
+local CounterTable
+pcall(function()
+    for _, Obj in ipairs(getgc(true)) do
+        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
+            CounterTable = Obj
+            break
+        end
+    end
+end)
+
+-- NetGet Function
+local function NetGet(...)
+    if not CounterTable or not CounterTable.func then return end
+    local args = {...}
+    CounterTable.func = (CounterTable.func or 0) + 1
+    local success, result = pcall(function()
+        local GetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Get")
+        return GetRemote:InvokeServer(CounterTable.func, unpack(args))
+    end)
+    if not success then warn("[NetGet Error]", result) end
+    return result
+end
+
+-- ฟังก์ชันตรวจสอบและเก็บไอเท็ม
+local function CheckAndPickup()
+    if not PickupEnabled then return end
+    local droppedFolder = workspace:FindFirstChild("DroppedItems") or workspace:FindFirstChild("DroppedItem")
+    if not droppedFolder then return end
+
+    for _, item in ipairs(droppedFolder:GetChildren()) do
+        if item.Name == "Money" then continue end
+        if item:IsA("Model") and item:FindFirstChildWhichIsA("BasePart") then
+            local modelCF = item.GetPivot and item:GetPivot() or item:GetModelCFrame()
+            local distance = (rootPart.Position - modelCF.Position).Magnitude
+            if distance <= 15 then
+                pcall(function()
+                    NetGet("pickup_dropped_item", item)
+                end)
+            end
+        end
+    end
+end
+
+-- อัปเดต char ใหม่
+player.CharacterAdded:Connect(function(newChar)
+    char = newChar
+    rootPart = char:WaitForChild("HumanoidRootPart")
+end)
+
+-- Loop ทุกเฟรม
+RunService.Heartbeat:Connect(CheckAndPickup)
+
+CheaterTab:Toggle({
+    Title = "Pickup Items",
+    Icon = "circle-check",
+    Value = PickupEnabled,
+    Callback = function(state)
+        PickupEnabled = state
+        print("🧲 Auto Pickup Items:", state and "ON" or "OFF")
+    end
+})
