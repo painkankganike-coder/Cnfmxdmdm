@@ -1218,7 +1218,17 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
 end)
 
-= player.Character
+local ESPEnabled = false
+local ESPConnections = {}
+
+local ESP_Enabled = false
+local ESP_Objects = {}
+
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    if ESP_Objects[player] then return end
+
+local character = player.Character
     local head = character and character:FindFirstChild("Head")
     if not head then return end
 
