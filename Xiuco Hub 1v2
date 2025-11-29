@@ -10,8 +10,8 @@ local Players, RunService, Camera, LocalPlayer, ReplicatedStorage =
 -- 2️⃣ สร้างหน้าต่าง
 local Window = WindUI:CreateWindow({
     Title = "XIUCO HUB | BlockSpin",
-    Icon = "earth",
-    Author = "My  | PXiuco Hub pvp Paid💵",
+    Icon = "anchor",
+    Author = "My Xiuco | Pvp Paid💵",
     Folder = "XINCOHubFolder",
     Size = UDim2.fromOffset(400, 350),
     Theme = "Light",
@@ -39,7 +39,7 @@ CheaterTab:Section({Title="PLAYER  :"})
 local EspTab = Window:Tab({Title = "Esp", Icon = "user"})
 EspTab:Section({Title="Esp PLAYER  :"})
 
-local MiscTab = Window:Tab({Title = "Misc", Icon = "home"})
+local MiscTab = Window:Tab({Title = "Misc", Icon = "user"})
 MiscTab:Section({Title="Misc  :"})
 
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
@@ -1797,7 +1797,7 @@ EspTab:Toggle({
     end
 })
 
-local player = game.Players.LocalPlayer
+
 getgenv().SkipCrateEnabled = false
 
 
