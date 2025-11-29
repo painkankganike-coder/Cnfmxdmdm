@@ -354,7 +354,7 @@ CombatTab:Dropdown({
 CombatTab:Slider({
     Title = "aim Distance",
     Step = 5,
-    Value = {Min = 200, Max = 3000, Default = MaxLockDistanceValue.Value},
+    Value = {Min = 200, Max = 1000, Default = MaxLockDistanceValue.Value},
     Callback = function(value)
         MaxLockDistanceValue.Value = value
     end
@@ -1587,7 +1587,7 @@ local MAX_SIZE = Vector2.new(30, 70)
 -- สร้าง Box 2D
 local function createESPBox()
     local box = Drawing.new("Square")
-    box.Thickness = 0.5
+    box.Thickness = 1
     box.Filled = false
     box.Color = Color3.new(1,1,1)
     box.Visible = false
