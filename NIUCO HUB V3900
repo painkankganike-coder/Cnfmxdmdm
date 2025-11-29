@@ -20,7 +20,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:Tag({
-    Title = "v 0.6.2",
+    Title = "v 0.6.4",
     Icon = "arrow-big-up",
     Color = Color3.fromHex("#000000"),
     Radius = 13, -- from 0 to 13
@@ -1734,7 +1734,7 @@ local function registerItems(folder)
 end
 
 pcall(function()
-    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 5)
+    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 10)
     if itemsFolder then registerItems(itemsFolder) end
     for _, obj in ipairs(ReplicatedStorage:GetChildren()) do
         if obj:IsA("Folder") and (obj.Name:find("Weapon") or obj.Name:find("Item") or obj.Name:find("Tool")) then
@@ -2314,7 +2314,7 @@ local function StopServerHopper()
     print("⛔ Server Hopper หยุดทำงานแล้ว")
 end
 
-ServerTab:Toggle({
+ServerTab:Button({
     Title = "Server big Hop",
     Desc = "กดและหาคนเยอะ 🚀",
     Default = false,
