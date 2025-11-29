@@ -2331,7 +2331,7 @@ local function ClaimAllQuests()
     return claimed
 end
 
-CheaterTab:Button({
+MiscTab:Button({
     Title = "Claim All Quests",
     Desc = "กดเพื่อ Claim Quest ทั้งหมด 🎯",
     Locked = false,
@@ -2408,7 +2408,7 @@ local function StopServerHopper()
     print("⛔ Server Hopper หยุดทำงานแล้ว")
 end
 
-ServerTab:Button({
+ServerTab:Toggle({
     Title = "Server big Hop",
     Desc = "กดและหาคนเยอะ 🚀",
     Default = false,
