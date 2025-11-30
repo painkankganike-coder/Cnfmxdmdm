@@ -19,7 +19,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:Tag({
-    Title = "v 0.7.2",
+    Title = "v 0.7.3",
     Icon = "arrow-big-up",
     Color = Color3.fromHex("#000000"),
     Radius = 13, -- from 0 to 13
@@ -139,7 +139,7 @@ local function PredictPosition(part)
     if AttackAntiLockEnabledValue.Value then
         local headCFrame = part.CFrame
         local forward = headCFrame.LookVector
-        return part.Position + forward * PREDICTION_FACTOR * 3
+        return part.Position + forward * PREDICTION_FACTOR * 0.1
     end
 
     local velocity = root.Velocity
