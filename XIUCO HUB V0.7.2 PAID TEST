@@ -29,7 +29,7 @@ Window:Tag({
 local CombatTab = Window:Tab({Title = "Combat", Icon = "crosshair"})
 CombatTab:Section({Title="Gun :"})
 
-local WeaponTab = Window:Tab({Title = "Weapon Mods:", Icon = "crosshair"})
+local WeaponTab = Window:Tab({Title = "Weapon Mods:", Icon = "cpu"})
 WeaponTab:Section({Title="Weapon Mods :"})
 
 CheaterTab = Window:Tab({Title = "Cheater", Icon = "user"})
