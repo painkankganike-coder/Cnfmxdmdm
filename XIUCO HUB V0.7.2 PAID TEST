@@ -358,7 +358,7 @@ CombatTab:Dropdown({
 CombatTab:Slider({
     Title = "aim Distance",
     Step = 5,
-    Value = {Min = 200, Max = 3000, Default = MaxLockDistanceValue.Value},
+    Value = {Min = 200, Max = 1000, Default = MaxLockDistanceValue.Value},
     Callback = function(value)
         MaxLockDistanceValue.Value = value
     end
@@ -986,6 +986,7 @@ CheaterTab:Toggle({
 -- ========================
 -- Snap / Dig
 -- ========================
+CheaterTab:Divider()
 CheaterTab:Section({Title="Snap PC key [ Z ]"})
 local isRunning = false
 local function SnapQuick()
@@ -1010,6 +1011,8 @@ local function SnapQuick()
     hum.Sit=false
     isRunning=false
 end
+
+
 
 CheaterTab:Button({
     Title="Snap Click",
@@ -2436,6 +2439,8 @@ local function BoostFPS_Disable()
         end
     end
 end
+
+ServerTab:Divider()
 ServerTab:Section({Title="Server Mods  :"})
 
 ServerTab:Button({
@@ -2451,6 +2456,8 @@ ServerTab:Button({
         end
     end
 })
+
+
 
 ServerTab:Button({
     Title = "Remove Roads",
