@@ -66,7 +66,7 @@ local GunLookup = {}
 for _, name in pairs(GunNames) do GunLookup[name] = true end
 
 -- 5️⃣ FOV Polygon (15 เหลี่ยม)
-local sides = 25
+local sides = 20
 local fovPolygon = {}
 for i = 1, sides do
     fovPolygon[i] = Drawing.new("Line")
