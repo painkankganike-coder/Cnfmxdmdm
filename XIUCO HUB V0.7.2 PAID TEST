@@ -65,14 +65,15 @@ local GunNames = {
 local GunLookup = {}
 for _, name in pairs(GunNames) do GunLookup[name] = true end
 
--- 5️⃣ FOV Polygon (15 เหลี่ยม)
-local sides = 20
-local fovPolygon = {}
-for i = 1, sides do
-    fovPolygon[i] = Drawing.new("Line")
-    fovPolygon[i].Color = Color3.fromRGB(0,255,0)
-    fovPolygon[i].Thickness = 3
-    fovPolygon[i].Visible = false
+local fovCircle = Drawing.new("Circle")
+fovCircle.Color = Color3.new(1,1,1)
+fovCircle.Thickness = 2
+fovCircle.NumSides = 230
+fovCircle.Radius = FOV
+fovCircle.Filled = false
+fovCircle.Visible = FOVVisible
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
 end
 
 -- 6️⃣ Tracer Line
@@ -2521,39 +2522,3 @@ ServerTab:Button({
     end
 })
 
-miscTab:Divider()
-miscTab:Section({Title="my Config  :"})
-
-local saveFunc = myConfig["Save"]
-local deleteFunc = myConfig["Delete"]
-local loadFunc = myConfig["Load"]
-
-local SaveConfigButton =
-    miscTab:Button(
-    {
-        Title = "Save Config",
-        Callback = function()
-            if saveFunc then
-                saveFunc(myConfig)
-            end
-        end
-    }
-)
-myConfig:Register("SaveConfig", SaveConfigButton)
-
-local DeleteConfigButton =
-    miscTab:Button(
-    {
-        Title = "Delete Config",
-        Callback = function()
-            if deleteFunc then
-                deleteFunc(myConfig)
-            end
-        end
-    }
-)
-myConfig:Register("DeleteConfig", DeleteConfigButton)
-
-if loadFunc then
-    loadFunc(myConfig)
-end
