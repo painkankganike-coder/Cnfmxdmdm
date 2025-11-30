@@ -2520,3 +2520,40 @@ ServerTab:Button({
         print("✅ DoorSystem & all doors removed!")
     end
 })
+
+miscTab:Divider()
+miscTab:Section({Title="my Config  :"})
+
+local saveFunc = myConfig["Save"]
+local deleteFunc = myConfig["Delete"]
+local loadFunc = myConfig["Load"]
+
+local SaveConfigButton =
+    miscTab:Button(
+    {
+        Title = "Save Config",
+        Callback = function()
+            if saveFunc then
+                saveFunc(myConfig)
+            end
+        end
+    }
+)
+myConfig:Register("SaveConfig", SaveConfigButton)
+
+local DeleteConfigButton =
+    miscTab:Button(
+    {
+        Title = "Delete Config",
+        Callback = function()
+            if deleteFunc then
+                deleteFunc(myConfig)
+            end
+        end
+    }
+)
+myConfig:Register("DeleteConfig", DeleteConfigButton)
+
+if loadFunc then
+    loadFunc(myConfig)
+end
