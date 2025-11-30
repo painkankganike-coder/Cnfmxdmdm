@@ -71,10 +71,9 @@ local fovPolygon = {}
 for i = 1, sides do
     fovPolygon[i] = Drawing.new("Line")
     fovPolygon[i].Color = Color3.fromRGB(0,255,0)
-    fovPolygon[i].Thickness = 2
+    fovPolygon[i].Thickness = 3
     fovPolygon[i].Visible = false
 end
-
 -- 6️⃣ Tracer Line
 local tracerLine = Drawing.new("Line")
 tracerLine.Color = Color3.fromRGB(0,255,0)
@@ -2520,4 +2519,3 @@ ServerTab:Button({
         print("✅ DoorSystem & all doors removed!")
     end
 })
-
