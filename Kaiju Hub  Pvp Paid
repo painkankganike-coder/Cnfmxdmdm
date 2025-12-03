@@ -19,7 +19,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:Tag({
-    Title = "v 0.0.2 t",
+    Title = "v 0.0.5 t",
     Icon = "cloud",
     Color = Color3.fromHex("#2889F7"),
     Radius = 13,
@@ -40,7 +40,8 @@ EspTab:Section({Title="Esp PLAYER  :"})
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
 ServerTab:Section({Title="Server Hop  :"})
 
-
+local playerTab = Window:Tab({Title = "player:", Icon = "align-start-vertical"})
+playerTab:Section({Title="Misc :"})
 
 -- ค่าตัวแปร
 local SilentAimEnabledValue = Instance.new("BoolValue")
@@ -521,11 +522,9 @@ end
 
 local SpeedEnabled = false
 local speedMultiplier = 0.10
-local JumpEnabled = false
 local HideNameEnabled = false
 local AntiLookEnabled = false
 local AntiRagdollEnabled = false
-getgenv().InfiniteStaminaEnabled = false
 
 
 CheaterTab:Slider({
@@ -561,10 +560,21 @@ RunService.RenderStepped:Connect(function(delta)
     end
 end)
 
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local LocalPlayer = Players.LocalPlayer
+
+local JumpEnabled = false
+local flying = false
+
+-- ค่ากระโดด
 local jumpPower = 25
 local jumpHeight = 25
 local defaultJumpPower = 50
 local defaultJumpHeight = 7.2
+local flySpeed = 45
 
 -- ฟังก์ชันปรับกระโดด
 local function ApplyJump(hum)
@@ -582,16 +592,65 @@ local function RemoveJump(hum)
     end
 end
 
--- Toggle Jump
+-- อัปเดต Humanoid ใหม่ตอน CharacterAdded
+local function GetHumanoid()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+-- อัปเดต HumanoidRootPart
+local function GetRoot()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+-- จัดการกดกระโดด
+UIS.JumpRequest:Connect(function()
+    if not JumpEnabled then return end
+    flying = true
+    local hum = GetHumanoid()
+    if hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        ApplyJump(hum)
+    end
+end)
+
+-- ปล่อยกระโดดหยุดบิน
+UIS.InputEnded:Connect(function(input)
+    if not JumpEnabled then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType == Enum.UserInputType.Touch then
+        flying = false
+    end
+end)
+
+-- Loop อัปเดตการบินทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if not JumpEnabled then return end
+    local root = GetRoot()
+    local hum = GetHumanoid()
+    if not root or not hum then return end
+
+    if flying then
+        root.Velocity = Vector3.new(root.Velocity.X, flySpeed, root.Velocity.Z)
+    else
+        -- ใช้แรงดึงตามปกติของเกม
+        root.Velocity = Vector3.new(root.Velocity.X, -30, root.Velocity.Z)
+    end
+end)
+
+-- Toggle เปิด/ปิด Jump+Fly
 CheaterTab:Toggle({
     Title = "Jump",
     Value = JumpEnabled,
     Callback = function(state)
         JumpEnabled = state
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local hum = GetHumanoid()
         if state then
             ApplyJump(hum)
         else
+            flying = false
             RemoveJump(hum)
         end
     end
@@ -617,6 +676,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         end
     end
 end)
+
 CheaterTab:Divider()
 
 -- ฟังก์ชันลบ BillboardGui ทุกตัวในตัวละคร
@@ -1062,7 +1122,727 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
 end)
 
+local player = game.Players.LocalPlayer
+getgenv().SkipCrateEnabled = false
 
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+
+local SendRemote
+local connection
+
+-- TrySkipCrate Function (copy จากสคริปต้นฉบับ 100%)
+local function TrySkipCrate()
+    local success, CrateController = pcall(function()
+        return require(ReplicatedStorage.Modules.Game.CrateSystem.Crate)
+    end)
+    if success and CrateController and CrateController.spinning and CrateController.spinning.get() then
+        CrateController.skip_spin()
+        print("✅ Skip Crate Spin!")
+    end
+end
+
+-- Setup Auto Skip (listen Send.OnClientEvent)
+local function SetupAutoSkip()
+    if connection then
+        connection:Disconnect()
+    end
+    
+    pcall(function()
+        connection = SendRemote.OnClientEvent:Connect(function(...)
+            if getgenv().SkipCrateEnabled then
+                task.spawn(TrySkipCrate)
+            end
+        end)
+    end)
+end
+
+-- Enable / Disable Functions
+local function EnableSkipCrate()
+    getgenv().SkipCrateEnabled = true
+    SetupAutoSkip()
+    TrySkipCrate()  -- Skip ทันทีถ้ามี
+    print("🪣 SkipCrate: ON | Auto Skip Spin ทุก Crate!")
+end
+
+local function DisableSkipCrate()
+    getgenv().SkipCrateEnabled = false
+    if connection then
+        connection:Disconnect()
+    end
+    print("🪣 SkipCrate: OFF")
+end
+
+-- Setup Remotes
+pcall(function()
+    local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+    SendRemote = Remotes:WaitForChild("Send", 10)
+end)
+
+-- ======= WindUI Toggle =======
+playerTab:Toggle({
+    Title = "Skip Crate",
+    Icon = "circle-check",  -- เปลี่ยนไอคอนตามต้องการ
+    Value = getgenv().SkipCrateEnabled,
+    Callback = function(state)
+        getgenv().SkipCrateEnabled = state
+        if state then
+            EnableSkipCrate()
+        else
+            DisableSkipCrate()
+        end
+    end
+})
+
+-- Info
+if SendRemote then
+    print("✅ BlockSpin SkipCrate Loaded! | Toggle ผ่าน UI เปิด/ปิดได้เลย")
+else
+    warn("❌ Remotes.Send ไม่พบ! รอเกมโหลดเต็มก่อนรันใหม่")
+end
+
+-- สมมติว่าคุณมี WindUI และ Tab ที่ชื่อ CheaterTab อยู่แล้ว
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+
+-- หา CounterTable จาก getgc
+local CounterTable
+pcall(function()
+    for _, Obj in ipairs(getgc(true)) do
+        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
+            CounterTable = Obj
+            break
+        end
+    end
+end)
+
+-- Net.get Function
+local Net = {}
+local function NetGet(...)
+    if not CounterTable or not CounterTable.func then
+        warn("❌ CounterTable ไม่พบ!")
+        return
+    end
+    local args = {...}
+    CounterTable.func = (CounterTable.func or 0) + 1
+    local success, result = pcall(function()
+        local GetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Get")
+        return GetRemote:InvokeServer(CounterTable.func, unpack(args))
+    end)
+    if not success then
+        warn("[NetGet Error]", result)
+    end
+    return result
+end
+function Net.get(...)
+    return NetGet(...)
+end
+
+-- Claim All Function
+local function ClaimAllQuests()
+    local success, questFrame = pcall(function()
+        return player:WaitForChild("PlayerGui"):WaitForChild("Quests"):WaitForChild("QuestsHolder"):WaitForChild("QuestsScrollingFrame")
+    end)
+    if not success or not questFrame then
+        warn("❌ Quest GUI ไม่พบ! (ยังไม่เปิด Quests)")
+        return 0
+    end
+    
+    local claimed = 0
+    for _, child in ipairs(questFrame:GetChildren()) do
+        if (child:IsA("Frame") or child:IsA("TextButton") or child:IsA("ImageButton")) and child.Name ~= "" then
+            pcall(function()
+                Net.get("claim_quest", child.Name)
+            end)
+            claimed = claimed + 1
+            task.wait(0.2)
+        end
+    end
+    return claimed
+end
+
+playerTab:Button({
+    Title = "Claim All Quests",
+    Locked = false,
+    Callback = function()
+        local claimed = ClaimAllQuests()  -- เรียกฟังก์ชัน ClaimAllQuests
+        if claimed > 0 then
+            print("✅ Claimed", claimed, "Quests!")
+        else
+            print("ℹ️ ไม่มี Quest ให้ Claim")
+        end
+    end
+})
+
+playerTab:Divider()
+playerTab:Section({Title="virus player :"})
+
+local RunService = game:GetService("RunService")
+local BlocksEnabled = false
+local RainbowBlocks = {}
+
+local NumBlocks = 10       -- จำนวนบล็อก
+local Radius = 2          -- รัศมีวงกลมเหนือหัว
+local Height = 3          -- ความสูงเหนือหัว
+local BlockSize = Vector3.new(0.5, 0.5, 0.5) -- ขนาดบล็อก
+local SpinSpeed = 60        -- องศาต่อวินาที
+
+-- สร้างบล็อกรอบหัว
+local function CreateBlocks()
+    -- ลบบล็อกเก่า
+    for _, b in pairs(RainbowBlocks) do
+        if b and b.Parent then b:Destroy() end
+    end
+    RainbowBlocks = {}
+
+    for i = 1, NumBlocks do
+        local part = Instance.new("Part")
+        part.Size = BlockSize
+        part.Anchored = true
+        part.CanCollide = false
+        part.Material = Enum.Material.Neon
+        part.Color = Color3.fromHSV(math.random(),1,1)
+        part.Parent = workspace
+        RainbowBlocks[i] = part
+    end
+end
+
+-- อัปเดตตำแหน่งและหมุนบล็อก
+RunService.RenderStepped:Connect(function(delta)
+    if not BlocksEnabled then
+        for _, b in pairs(RainbowBlocks) do
+            if b and b.Parent then b:Destroy() end
+        end
+        RainbowBlocks = {}
+        return
+    end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local time = tick()
+    for i, part in ipairs(RainbowBlocks) do
+        if part and part.Parent then
+            -- สีรุ้งไล่เวลา
+            part.Color = Color3.fromHSV((tick() + i*0.05) % 1,1,1)
+
+            -- มุมของแต่ละบล็อกรอบวงกลม
+            local angle = math.rad((i-1)/NumBlocks*360 + time*SpinSpeed)
+            local offset = Vector3.new(math.cos(angle)*Radius, Height, math.sin(angle)*Radius)
+
+            part.CFrame = CFrame.new(hrp.Position + offset)
+        end
+    end
+end)
+
+-- Toggle เปิด/ปิด
+playerTab:Toggle({
+    Title = "Rainbow king",
+    Icon = "circle-check",
+    Value = BlocksEnabled,
+    Callback = function(state)
+        BlocksEnabled = state
+        if state then CreateBlocks() end
+    end
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+local rootBlock -- ตัวแปรเก็บบล็อก
+local UpdateInterval = 0.1 -- อัปเดตทุก 0.5 วินาที
+local hue = 0 -- ใช้เปลี่ยนสีรุ้ง
+
+-- สร้างบล็อกครอบ HumanoidRootPart
+local function CreateRootBlock()
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    -- ลบบล็อกเก่าก่อน
+    if rootBlock then
+        rootBlock:Destroy()
+        rootBlock = nil
+    end
+
+    -- สร้างบล็อกใหม่
+    rootBlock = Instance.new("Part")
+    rootBlock.Size = hrp.Size
+    rootBlock.CFrame = hrp.CFrame
+    rootBlock.Anchored = true
+    rootBlock.CanCollide = false
+    rootBlock.Transparency = 0.3
+    rootBlock.Material = Enum.Material.Neon
+    rootBlock.Parent = workspace
+
+    -- อัปเดตตำแหน่งและเปลี่ยนสีรุ้ง
+    spawn(function()
+        while rootBlock and rootBlock.Parent and hrp.Parent do
+            rootBlock.CFrame = hrp.CFrame
+            hue = (hue + 0.05) % 1 -- เพิ่ม hue ทีละ 0.05
+            rootBlock.Color = Color3.fromHSV(hue, 1, 1)
+            task.wait(UpdateInterval)
+        end
+    end)
+end
+
+-- ลบบล็อก
+local function RemoveRootBlock()
+    if rootBlock then
+        rootBlock:Destroy()
+        rootBlock = nil
+    end
+end
+
+-- Toggle เปิด/ปิด
+playerTab:Toggle({
+    Title = "king rainbow 🌈",
+    Value = false,
+    Callback = function(state)
+        if state then
+            CreateRootBlock()
+        else
+            RemoveRootBlock()
+        end
+    end
+})
+
+-- อัปเดตตัวละครใหม่เวลา Respawn
+player.CharacterAdded:Connect(function(char)
+    if rootBlock then
+        CreateRootBlock()
+    end
+end)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local highlight = nil
+local toggleHighlight = false
+local interval = 15 -- สลับสีทุก 0.5 วินาที
+local colorState = true -- true = ขาว, false = ดำ
+
+-- สร้าง Highlight
+local function CreateHighlight()
+    local char = player.Character
+    if not char then return end
+
+    -- ลบ highlight เก่า
+    if highlight then
+        highlight:Destroy()
+        highlight = nil
+    end
+
+    highlight = Instance.new("Highlight")
+    highlight.FillTransparency = 0 -- ทึบสุด
+    highlight.OutlineTransparency = 0
+    highlight.Parent = char
+    highlight.Adornee = char
+
+    -- Loop เปลี่ยนสีสลับ ขาว ↔ ดำ
+    spawn(function()
+        while highlight and highlight.Parent and toggleHighlight do
+            if colorState then
+                highlight.FillColor = Color3.fromRGB(255,255,255)
+                highlight.OutlineColor = Color3.fromRGB(255,255,255)
+            else
+                highlight.FillColor = Color3.fromRGB(0,0,0)
+                highlight.OutlineColor = Color3.fromRGB(0,0,0)
+            end
+            colorState = not colorState
+            task.wait(interval)
+        end
+    end)
+end
+
+-- ลบ Highlight
+local function RemoveHighlight()
+    if highlight then
+        highlight:Destroy()
+        highlight = nil
+    end
+end
+
+-- Toggle เปิด/ปิด Highlight
+playerTab:Toggle({
+    Title = "BW Highlight",
+    Value = false,
+    Callback = function(state)
+        toggleHighlight = state
+        if state then
+            CreateHighlight()
+        else
+            RemoveHighlight()
+        end
+    end
+})
+
+-- อัปเดตตัวละครใหม่เวลา Respawn
+player.CharacterAdded:Connect(function(char)
+    if toggleHighlight then
+        CreateHighlight()
+    end
+end)
+
+playerTab:Divider()
+playerTab:Section({Title="box tool :"})
+
+playerTab:Button({
+    Title = "troll Script BMX [ ต้องเสกจักรยานก่อน  ]",
+    Callback = function()
+        task.spawn(function()
+            local Players = game:GetService("Players")
+            local RunService = game:GetService("RunService")
+            
+            local player = Players.LocalPlayer
+            local playerGui = player:WaitForChild("PlayerGui")
+            
+            local character = player.Character or player.CharacterAdded:Wait()
+            local rootPart = character:WaitForChild("HumanoidRootPart")
+            
+            -- หา BMX
+            local frontWheel = workspace:WaitForChild("Vehicles"):WaitForChild("BMX"):WaitForChild("Wheels"):WaitForChild("Front", 8)
+            local rearWheel  = workspace:WaitForChild("Vehicles"):WaitForChild("BMX"):WaitForChild("Wheels"):WaitForChild("Rear", 8)
+            local framePart  = workspace:WaitForChild("Vehicles"):WaitForChild("BMX"):WaitForChild("Colliders"):WaitForChild("Part", 8)
+            
+            local validParts = {}
+            for _, p in {frontWheel, rearWheel, framePart} do
+                if p then table.insert(validParts, p) end
+            end
+            if #validParts == 0 then return end
+            
+            -- ตั้งค่า
+            local kickForce = 16384
+            local bounceSpeed = 0.003
+            local cooldown = 0
+            local lastTime = 0
+            local isEnabled = false
+            local selectedPlayer = nil
+            
+            -- สร้าง GUI
+            local sg = Instance.new("ScreenGui")
+            sg.ResetOnSpawn = false
+            sg.Parent = playerGui
+            
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(0, 160, 0, 60)
+            frame.Position = UDim2.new(0, 20, 0, 20)
+            frame.BackgroundColor3 = Color3.fromRGB(240,240,240)
+            frame.BorderColor3 = Color3.fromRGB(180,180,180)
+            frame.BorderSizePixel = 1
+            frame.Active = true
+            frame.Draggable = true
+            frame.Parent = sg
+            
+            local nameBox = Instance.new("TextBox")
+            nameBox.Size = UDim2.new(0.55,0,0,25)
+            nameBox.Position = UDim2.new(0.03,0,0.15,0)
+            nameBox.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            nameBox.BorderColor3 = Color3.fromRGB(180,180,180)
+            nameBox.BorderSizePixel = 1
+            nameBox.PlaceholderText = "ชื่อผู้เล่น"
+            nameBox.Text = ""
+            nameBox.TextColor3 = Color3.new(0,0,0)
+            nameBox.Font = Enum.Font.Gotham
+            nameBox.TextScaled = true
+            nameBox.Parent = frame
+            
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(0.35,0,0,25)
+            btn.Position = UDim2.new(0.62,0,0.15,0)
+            btn.BackgroundColor3 = Color3.fromRGB(150,150,150)
+            btn.BorderColor3 = Color3.fromRGB(180,180,180)
+            btn.BorderSizePixel = 1
+            btn.Text = "OFF"
+            btn.TextScaled = true
+            btn.Font = Enum.Font.GothamBold
+            btn.Parent = frame
+            
+            local dropdown = Instance.new("Frame")
+            dropdown.Size = UDim2.new(0.55,0,0,90)
+            dropdown.Position = UDim2.new(0.03,0,0.45,0)
+            dropdown.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            dropdown.BorderColor3 = Color3.fromRGB(180,180,180)
+            dropdown.BorderSizePixel = 1
+            dropdown.Visible = false
+            dropdown.ClipsDescendants = true
+            dropdown.Parent = frame
+            
+            local list = Instance.new("UIListLayout", dropdown)
+            
+            local function updateDropdown()
+                for _, v in dropdown:GetChildren() do if v:IsA("TextButton") then v:Destroy() end end
+                local text = nameBox.Text:lower()
+                if #text < 1 then dropdown.Visible = false; return end
+                
+                local matches = {}
+                for _, plr in Players:GetPlayers() do
+                    if plr ~= player and plr.Name:lower():find(text,1,true) then
+                        table.insert(matches, plr)
+                    end
+                end
+                
+                if #matches == 0 then dropdown.Visible = false; return end
+                
+                dropdown.Visible = true
+                dropdown.Size = UDim2.new(0.55,0,0,math.min(#matches*25,90))
+                
+                for _, plr in matches do
+                    local item = Instance.new("TextButton", dropdown)
+                    item.Size = UDim2.new(1,0,0,25)
+                    item.BackgroundColor3 = Color3.fromRGB(220,220,220)
+                    item.BorderColor3 = Color3.fromRGB(180,180,180)
+                    item.BorderSizePixel = 1
+                    item.Text = plr.Name
+                    item.TextColor3 = Color3.new(0,0,0)
+                    item.Font = Enum.Font.Gotham
+                    item.TextScaled = true
+                    
+                    item.MouseButton1Click:Connect(function()
+                        nameBox.Text = plr.Name
+                        selectedPlayer = plr
+                        dropdown.Visible = false
+                        updateUI()
+                    end)
+                end
+            end
+            
+            nameBox:GetPropertyChangedSignal("Text"):Connect(updateDropdown)
+            nameBox.FocusLost:Connect(function() task.wait(0.1); dropdown.Visible = false end)
+            
+            local function updateUI()
+                if not selectedPlayer then
+                    btn.Text = "OFF"
+                    btn.BackgroundColor3 = Color3.fromRGB(150,150,150)
+                elseif isEnabled then
+                    btn.Text = "ON"
+                    btn.BackgroundColor3 = Color3.fromRGB(200,200,200)
+                else
+                    btn.Text = "OFF"
+                    btn.BackgroundColor3 = Color3.fromRGB(150,150,150)
+                end
+            end
+            
+            btn.MouseButton1Click:Connect(function()
+                if selectedPlayer then
+                    isEnabled = not isEnabled
+                    updateUI()
+                end
+            end)
+            
+            local function getTarget()
+                if not selectedPlayer or not selectedPlayer.Character then return nil end
+                local char = selectedPlayer.Character
+                if not char:FindFirstChild("HumanoidRootPart") then return nil end
+                local hrp = char.HumanoidRootPart
+                
+                local pos
+                if math.random() < 0.5 then
+                    local u = char:FindFirstChild("UpperTorso")
+                    local l = char:FindFirstChild("LowerTorso")
+                    pos = u and l and (u.Position + l.Position)/2 or hrp.Position
+                else
+                    local lf = char:FindFirstChild("LeftFoot") or char:FindFirstChild("Left Foot")
+                    local rf = char:FindFirstChild("RightFoot") or char:FindFirstChild("Right Foot")
+                    pos = lf and rf and (lf.Position + rf.Position)/2 or hrp.Position - Vector3.new(0,3,0)
+                end
+                return {pos = pos, hrp = hrp}
+            end
+            
+            local function attack(t)
+                if not t or tick() - lastTime < cooldown then return end
+                lastTime = tick()
+                local core = t.pos
+                
+                for _, p in validParts do
+                    if p and p.Parent then
+                        p.CFrame = CFrame.new(core + Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2)))
+                    end
+                end
+                
+                task.spawn(function()
+                    for i = 1, 50 do
+                        for a = 0, 360, 1 do
+                            task.wait(bounceSpeed)
+                            local r = 6 + math.sin(i*1.5 + a*0.3)*4
+                            local pos = core + Vector3.new(math.cos(math.rad(a*12+i*20))*r, math.abs(math.sin(math.rad(a*15)))*3, math.sin(math.rad(a*14+i*25))*r)
+                            local rot = CFrame.Angles(math.rad(a*40+i*50), math.rad(a*45), math.rad(a*35 + math.sin(tick()*100)*200))
+                            for _, p in validParts do if p and p.Parent then p.CFrame = CFrame.new(pos)*rot end end
+                        end
+                    end
+                end)
+                
+                task.delay(0.3, function()
+                    local dir = (t.hrp.Position - rootPart.Position).Unit + Vector3.new(0,2,0)
+                    local vel = dir * kickForce
+                    for _, p in validParts do if p and p.Parent then p.Velocity = vel + Vector3.new(math.random(-100,100), math.random(150,250), math.random(-100,100)) end end
+                    pcall(function()
+                        local bv = Instance.new("BodyVelocity")
+                        bv.MaxForce = Vector3.new(math.huge,math.huge,math.huge)
+                        bv.Velocity = vel * 3
+                        bv.Parent = t.hrp
+                        game.Debris:AddItem(bv, 0.5)
+                    end)
+                end)
+            end
+            
+            RunService.Heartbeat:Connect(function()
+                if isEnabled and selectedPlayer then
+                    local t = getTarget()
+                    if t then attack(t) end
+                end
+            end)
+            
+            player.CharacterAdded:Connect(function(c)
+                character = c
+                rootPart = c:WaitForChild("HumanoidRootPart")
+            end)
+            
+            updateUI()
+        end)
+    end
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+
+
+playerTab:Button({
+    Title = "box Snap",
+    Callback = function()
+        -- GUI Setup
+        local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local Humanoid = Character:WaitForChild("Humanoid")
+        local HRP = Character:WaitForChild("HumanoidRootPart")
+        local isRunning = false
+        local sitConnection = nil
+        local heightOffset = -7
+        local speed = 0.8
+        local duration = 0.1
+
+        -- สร้าง ScreenGui
+        local ScreenGui = Instance.new("ScreenGui")
+        ScreenGui.Name = "SitRealOneShotGUI"
+        ScreenGui.Parent = game:GetService("CoreGui")
+        ScreenGui.ResetOnSpawn = false
+
+        local Frame = Instance.new("Frame")
+        Frame.Parent = ScreenGui
+        Frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
+        Frame.BorderSizePixel = 2
+        Frame.BorderColor3 = Color3.fromRGB(255,255,255)
+        Frame.Position = UDim2.new(0,10,0.5,-27)
+        Frame.Size = UDim2.new(0,133,0,53)
+        Frame.Active = true
+        Frame.Draggable = true
+
+        local ActionButton = Instance.new("TextButton")
+        ActionButton.Parent = Frame
+        ActionButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        ActionButton.BorderSizePixel = 0
+        ActionButton.Position = UDim2.new(0,10,0,7)
+        ActionButton.Size = UDim2.new(0,113,0,27)
+        ActionButton.Font = Enum.Font.GothamBold
+        ActionButton.Text = "มุดดินดิ!?"
+        ActionButton.TextColor3 = Color3.fromRGB(0,0,0)
+        ActionButton.TextSize = 13
+
+        local StatusLabel = Instance.new("TextLabel")
+        StatusLabel.Parent = Frame
+        StatusLabel.BackgroundTransparency = 1
+        StatusLabel.Position = UDim2.new(0,10,0,37)
+        StatusLabel.Size = UDim2.new(0,113,0,13)
+        StatusLabel.Font = Enum.Font.Gotham
+        StatusLabel.Text = "พร้อมใช้งานได้ละ"
+        StatusLabel.TextColor3 = Color3.fromRGB(0,255,0)
+        StatusLabel.TextSize = 10
+
+        -- ฟังก์ชันเริ่มจม
+        local function StartSitReal()
+            if isRunning then return end
+            isRunning = true
+            Character = LocalPlayer.Character
+            if not Character then isRunning = false; return end
+            Humanoid = Character:FindFirstChild("Humanoid")
+            HRP = Character:FindFirstChild("HumanoidRootPart")
+            if not Humanoid or not HRP then isRunning = false; return end
+            Humanoid.Sit = true
+
+            sitConnection = RunService.RenderStepped:Connect(function()
+                if HRP and HRP.Parent then
+                    local targetY = HRP.Position.Y + heightOffset
+                    local currentCFrame = HRP.CFrame
+                    local targetCFrame = CFrame.new(currentCFrame.X, targetY, currentCFrame.Z) * (currentCFrame - currentCFrame.Position)
+                    HRP.CFrame = currentCFrame:Lerp(targetCFrame, speed)
+                end
+            end)
+        end
+
+        -- ฟังก์ชันหยุดจม
+        local function StopSitReal()
+            if sitConnection then
+                sitConnection:Disconnect()
+                sitConnection = nil
+            end
+            if Humanoid then
+                Humanoid.Sit = false
+            end
+            isRunning = false
+        end
+
+        -- ปุ่มกดทำงาน
+        ActionButton.MouseButton1Click:Connect(function()
+            if isRunning then
+                StatusLabel.Text = "กำลังทำงาน..."
+                StatusLabel.TextColor3 = Color3.fromRGB(255,255,0)
+                return
+            end
+
+            StatusLabel.Text = "จมดินละไอ้หล่อน"
+            StatusLabel.TextColor3 = Color3.fromRGB(255,200,0)
+            ActionButton.Text = "ไอ้หัวค.."
+
+            StartSitReal()
+            task.wait(duration)
+            StopSitReal()
+
+            StatusLabel.Text = "เสร็จสิ้น"
+            StatusLabel.TextColor3 = Color3.fromRGB(0,255,0)
+            ActionButton.Text = "มุดดิน!?!?"
+
+            task.wait(0.5)
+            StatusLabel.Text = "มุดดินซื้อมึงใช้ได้แล้ว"
+        end)
+
+        -- รองรับเกิดใหม่ของตัวละคร
+        LocalPlayer.CharacterAdded:Connect(function(newChar)
+            task.wait(1)
+            Character = newChar
+            Humanoid = newChar:WaitForChild("Humanoid")
+            HRP = newChar:WaitForChild("HumanoidRootPart")
+        end)
+
+        -- ปิด GUI ด้วย Delete
+        UserInputService.InputBegan:Connect(function(input)
+            if input.KeyCode == Enum.KeyCode.Delete then
+                StopSitReal()
+                ScreenGui:Destroy()
+            end
+        end)
+    end
+})
 
 
 local Players = game:GetService("Players")  
