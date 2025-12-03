@@ -37,6 +37,9 @@ CheaterTab:Section({Title="CHEATER :"})
 local EspTab = Window:Tab({Title = "Esp", Icon = "eye"})
 EspTab:Section({Title="Esp PLAYER  :"})
 
+local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
+ServerTab:Section({Title="Server Hop  :"})
+
 
 
 -- ค่าตัวแปร
@@ -96,7 +99,7 @@ tracerLine.Visible = false
 local function GetPrediction(part)
     if not part or not part.Parent then return Vector3.new() end
     local partSize = (part:IsA("BasePart") and part.Size.Y or 1)
-    return part.Position + Vector3.new(0, partSize/2, 0)
+    return part.Position + Vector3.new(0, partSize/3, 0)
 end
 
 -- ตรวจว่าหลังมีสิ่งกีดขวางหรือไม่
@@ -2061,5 +2064,337 @@ EspTab:Toggle({
         else
             disableItemESP()
         end
+    end
+})
+
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local player = Players.LocalPlayer
+local placeId = game.PlaceId
+
+ServerTab:Button({
+    Title = "Copy JobId",
+    Desc = "คัดลอกID server",
+    Callback = function()
+        setclipboard(game.JobId)
+        print("Copied JobId:", game.JobId)
+    end
+})
+
+ServerTab:Divider()
+local jobInput = ""
+ServerTab:Input({
+    Title = "JobId",
+    Desc = "ใส่ ID ที่จะย้ายเข้า",
+    Placeholder = "",
+    Callback = function(text)
+        jobInput = text
+    end
+})
+
+ServerTab:Button({
+    Title = "Join JobId",
+    Callback = function()
+        if jobInput ~= "" then
+            TeleportService:TeleportToPlaceInstance(placeId, jobInput, player)
+        else
+            warn("ใส่ JobId ให้ถูก")
+        end
+    end
+})
+
+local PlaceId = 104715542330896
+local TargetPlayers = 28
+
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = game.Players.LocalPlayer
+
+-- ฟังก์ชันดึงรายชื่อเซิร์ฟเวอร์
+local function GetServers(cursor)
+    local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100%s"):format(
+        PlaceId,
+        cursor and ("&cursor=" .. cursor) or ""
+    )
+
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+
+    return success and result or nil
+end
+
+
+ServerTab:Button({
+    Title = "Auto Server Hop",
+    Desc = "ค้นหาเซิร์ฟที่คน เยอะๆ ",
+    Callback = function()
+        task.spawn(function()
+            print("🔍 เริ่มค้นหาเซิร์ฟคน ≤ " .. TargetPlayers .. "...")
+
+            while true do
+                local cursor = nil
+                local found = false
+
+                repeat
+                    local data = GetServers(cursor)
+                    if not data then break end
+
+                    for _, server in ipairs(data.data) do
+                        local playing = server.playing or 0
+
+                        if playing <= TargetPlayers and playing < server.maxPlayers then
+                            print("📌 เจอเซิร์ฟ:", server.id, " | คน:", playing)
+                            TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
+                            found = true
+                            break
+                        end
+                    end
+
+                    cursor = data.nextPageCursor
+                until cursor == nil or found
+
+                task.wait(0.2)
+            end
+        end)
+    end
+})
+
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+
+function Rejoin()
+    local player = Players.LocalPlayer
+    if not player then return end
+    
+    local placeId = game.PlaceId
+    local jobId = game.JobId
+
+    -- ถ้าเซิร์ฟไม่สามารถ rejoin แบบกลับห้องเดิมได้ จะ teleport ปกติแทน
+    local success, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+    end)
+
+    if not success then
+        warn("Rejoin แบบ instance เดิมล้มเหลว:", err)
+        TeleportService:Teleport(placeId, player)
+    end
+end
+
+ServerTab:Button({
+    Title = "Rejoin ",
+    Desc = "เด็กข้างegg อยากกลับบ้าน",
+    Callback = function()
+        Rejoin()
+    end
+})
+
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+
+local function GetServers(cursor)
+    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    if cursor then
+        url = url .. "&cursor=" .. cursor
+    end
+
+    local success, response = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+
+    if success then
+        return response
+    else
+        warn("Error loading servers:", response)
+        return nil
+    end
+end
+
+function FindLowServer()
+    local cursor = nil
+    local lowestServer = nil
+
+    repeat
+        local servers = GetServers(cursor)
+        if not servers then break end
+
+        for _, server in ipairs(servers.data) do
+            local playing = server.playing or 0
+
+            if playing < server.maxPlayers then
+                -- หาคนน้อยที่สุด
+                if (not lowestServer) or (playing < lowestServer.playing) then
+                    lowestServer = server
+                end
+            end
+        end
+
+        cursor = servers.nextPageCursor
+    until cursor == nil
+
+    if lowestServer then
+        print("🔍 พบเซิร์ฟคนนี้น้อย:", lowestServer.id, " คน:", lowestServer.playing)
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, lowestServer.id, Players.LocalPlayer)
+    else
+        warn("❌ ไม่พบเซิร์ฟที่มีช่องว่าง")
+    end
+end
+
+ServerTab:Button({
+    Title = "small Server",
+    Desc = "หาคนน้อย",
+    Locked = false,
+    Callback = function()
+        FindLowServer()
+    end
+})
+
+local FPSBoostEnabled = false
+
+local Lighting = game:GetService("Lighting")
+local OriginalSky = {}
+local OriginalParts = {}
+
+-- โทนเทาแบบสบายตา
+local grayColor = Color3.fromRGB(180,180,180)
+
+-- บันทึก Sky เดิม
+for _, v in ipairs(Lighting:GetChildren()) do
+    if v:IsA("Sky") then
+        table.insert(OriginalSky, v)
+    end
+end
+
+-- บันทึกข้อมูลของ Part เดิม
+local function SaveOriginal(part)
+    if OriginalParts[part] then return end
+    OriginalParts[part] = {
+        Color = part.Color,
+        Material = part.Material,
+        TextureID = part:IsA("MeshPart") and part.TextureID or nil
+    }
+end
+
+local function BoostFPS_Enable()
+    -- ลบ Sky
+    for _, v in ipairs(Lighting:GetChildren()) do
+        if v:IsA("Sky") then v:Destroy() end
+    end
+
+    -- เปลี่ยนสี + ลบภาพ
+    for _, obj in ipairs(workspace:GetDescendants()) do
+
+        if obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("SurfaceAppearance") then
+            obj:Destroy()
+
+        elseif obj:IsA("BasePart") then
+            SaveOriginal(obj)
+            obj.Color = grayColor
+            obj.Material = Enum.Material.SmoothPlastic
+
+        elseif obj:IsA("MeshPart") then
+            SaveOriginal(obj)
+            obj.TextureID = ""
+            obj.Color = grayColor
+            obj.Material = Enum.Material.SmoothPlastic
+        end
+    end
+end
+
+local function BoostFPS_Disable()
+    -- คืน Sky
+    for _, sky in ipairs(OriginalSky) do
+        sky.Parent = Lighting
+    end
+
+    -- คืนค่าของ Part ทั้งหมด
+    for part, data in pairs(OriginalParts) do
+        if part and part.Parent then
+            part.Color = data.Color
+            part.Material = data.Material
+            if part:IsA("MeshPart") and data.TextureID then
+                part.TextureID = data.TextureID
+            end
+        end
+    end
+end
+ServerTab:Section({Title="Server Mods  :"})
+
+ServerTab:Button({
+    Title = "No sky  (Click)",
+    Desc = "เปิดเพื่อจะเข้าโหมดหนาว และไม่มีก้อนเมฆตึงๆ⚪",
+    Callback = function()
+        FPSBoostEnabled = not FPSBoostEnabled
+        
+        if FPSBoostEnabled then
+            BoostFPS_Enable()
+        else
+            BoostFPS_Disable()
+        end
+    end
+})
+
+ServerTab:Button({
+    Title = "Remove Roads",
+    Desc = "ลบถนนออก🛣️",
+    Callback = function()
+
+        local success, mapFolder = pcall(function()
+            return workspace:WaitForChild("Map", 5)
+        end)
+
+        if not success or not mapFolder then
+            warn("❌ ไม่พบ workspace.Map")
+            return
+        end
+
+        local road = mapFolder:FindFirstChild("RoadNetwork")
+        if road then
+            road:Destroy()
+            print("✅ ลบ RoadNetwork เรียบร้อยแล้ว!")
+        else
+            warn("❌ ไม่พบ Map.RoadNetwork")
+        end
+    end
+})
+
+-- ฟังก์ชันลบประตู DoorSystem และประตูทั้งหมด
+local function removeDoors()
+    pcall(function()
+        -- ลบโฟลเดอร์ DoorSystem
+        if workspace:FindFirstChild("DoorSystem") then
+            workspace.DoorSystem:Destroy()
+        end
+
+        -- ลูปทุกอ็อบเจ็กต์ใน workspace
+        for _, obj in pairs(workspace:GetDescendants()) do
+            local name = obj.Name:lower()
+            local parentName = obj.Parent and obj.Parent.Name:lower() or ""
+            if name:find("door") or parentName:find("door") then
+                if obj:IsA("Model") then
+                    obj:Destroy()
+                elseif obj:IsA("BasePart") then
+                    obj.CanCollide = false
+                    obj.Transparency = 1
+                    if obj:FindFirstChild("ClickDetector") then
+                        obj.ClickDetector.MaxActivationDistance = 0
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- สร้างปุ่ม WindUI สำหรับลบประตู
+ServerTab:Button({
+    Title = "Remove Doors",
+    Desc = "ลบประตูออก🚪",
+    Locked = false,
+    Callback = function()
+        removeDoors()  -- เรียกฟังก์ชันลบประตู
+        print("✅ DoorSystem & all doors removed!")
     end
 })
