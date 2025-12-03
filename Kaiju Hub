@@ -1079,8 +1079,7 @@ CheaterTab:Button({
 })
 
 CheaterTab:Slider({
-    Title="Snap Depth",
-    Step=1,
+    Title="Snap DepplayerTab    Step=1,
     Value={Min=1,Max=50,Default=math.abs(SnapHeightOffset)},
     Callback=function(val)
         SnapHeightOffset=(SnapDirection=="Down" and -1 or 1)*val
@@ -1452,7 +1451,7 @@ local function RemoveHighlight()
     end
 end
 
--- Toggle เปิด/ปิด Highlight
+-- Toggle เปิด/Toggle
 playerTab:Toggle({
     Title = "BW Highlight",
     Value = false,
@@ -1465,14 +1464,6 @@ playerTab:Toggle({
         end
     end
 })
-
-
-
-local Players = game:GetService("Players")  
-local RunService = game:GetService("RunService")  
-local Workspace = game:GetService("Workspace")  
-local LocalPlayer = Players.LocalPlayer  
-local camera = Workspace.CurrentCamera  
 
 -- Config  
 local BOX_COLOR = Color3.fromRGB(255, 255, 255)  
