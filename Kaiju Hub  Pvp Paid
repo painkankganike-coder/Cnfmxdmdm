@@ -31,6 +31,16 @@ CombatTab:Section({Title="GUN :"})
 local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "crosshair"})
 WeaponTab:Section({Title="Gun Mods :"})
 
+
+local CheaterTab = Window:Tab({Title = "CHEATER:", Icon = "user"})
+CheaterTab:Section({Title="CHEATER :"})
+
+local EspTab = Window:Tab({Title = "Esp", Icon = "user"})
+EspTab:Section({Title="Esp PLAYER  :"}
+
+local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
+ServerTab:Section({Title="Server Hop  :"})
+
 -- ตัวแปร
 local SilentAimEnabledValue = Instance.new("BoolValue")
 SilentAimEnabledValue.Name = "SilentAimEnabled"
