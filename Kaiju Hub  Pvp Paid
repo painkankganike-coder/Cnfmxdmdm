@@ -65,12 +65,10 @@ local IgnorePlayers = {}
 local CurrentTarget, head, aimPos
 local hue = 0
 
--- ปืนที่รองรับ
 local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
 local GunLookup = {}
 for _, name in pairs(GunNames) do GunLookup[name] = true end
 
--- FOV Circle
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1
 fovCircle.NumSides = 100
@@ -79,12 +77,10 @@ fovCircle.Filled = false
 fovCircle.Visible = SilentAimEnabledValue.Value
 fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 
--- Tracer
 local tracerLine = Drawing.new("Line")
 tracerLine.Thickness = 1
 tracerLine.Visible = false
 
--- คาดเดาตำแหน่ง (ปิด)
 local PREDICT = 0.165
 local function VelocityPrediction(part)
     if not part or not part.Parent then return Vector3.new() end
@@ -94,7 +90,6 @@ local function VelocityPrediction(part)
     return part.Position + Vector3.new(0, partSize/2, 0) + vel * PREDICT
 end
 
--- คาดเดาตำแหน่ง (เปิด Anti Lock)
 local PREDICTION_FACTOR = 3
 local LastHealth = {}
 local function AntiLockPrediction(part)
@@ -104,8 +99,7 @@ local function AntiLockPrediction(part)
     if not humanoid then return part.Position end
     local speed = root and root.Velocity.Magnitude or 0
     local headPos = part.Position + Vector3.new(0, (part:IsA("BasePart") and part.Size.Y or 1)/2, 0)
-    
-    -- Health check
+
     local hp = humanoid.Health
     local lastHp = LastHealth[part.Parent] or hp
     LastHealth[part.Parent] = hp
