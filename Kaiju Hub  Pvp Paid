@@ -27,12 +27,16 @@ Window:Tag({
 
 local CombatTab = Window:Tab({Title = "COMBAT:", Icon = "crosshair"})
 CombatTab:Section({Title="GUN :"})
-local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "crosshair"})
+
+local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "blocks"})
 WeaponTab:Section({Title="Gun Mods :"})
+
 local CheaterTab = Window:Tab({Title = "CHEATER:", Icon = "user"})
 CheaterTab:Section({Title="CHEATER :"})
-local EspTab = Window:Tab({Title = "Esp", Icon = "user"})
+
+local EspTab = Window:Tab({Title = "Esp", Icon = "align-start-vertical"})
 EspTab:Section({Title="Esp PLAYER  :"}
+
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
 ServerTab:Section({Title="Server Hop  :"})
 
