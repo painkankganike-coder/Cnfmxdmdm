@@ -6,7 +6,6 @@ local Players, RunService, Camera, LocalPlayer, ReplicatedStorage =
     game.Players.LocalPlayer,
     game:GetService("ReplicatedStorage")
 
--- สร้างหน้าต่าง
 local Window = WindUI:CreateWindow({
     Title = "Kaiju Hub | Pvp Paid 💵",
     Icon = "gitlab",
@@ -70,7 +69,6 @@ local IgnorePlayers = {}
 local CurrentTarget, head, aimPos
 local hue = 0
 
--- ปืนที่รองรับ
 local GunNames = {
     "P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9",
     "Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"
@@ -78,7 +76,6 @@ local GunNames = {
 local GunLookup = {}
 for _, name in pairs(GunNames) do GunLookup[name] = true end
 
--- FOV Circle
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1
 fovCircle.NumSides = 100
@@ -87,19 +84,16 @@ fovCircle.Filled = false
 fovCircle.Visible = SilentAimEnabledValue.Value
 fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 
--- Tracer
 local tracerLine = Drawing.new("Line")
 tracerLine.Thickness = 2
 tracerLine.Visible = false
 
--- ยิงตรงปลายบนหัว
 local function GetPrediction(part)
     if not part or not part.Parent then return Vector3.new() end
     local partSize = (part:IsA("BasePart") and part.Size.Y or 1)
     return part.Position + Vector3.new(0, partSize/3, 0)
 end
 
--- ตรวจว่าหลังมีสิ่งกีดขวางหรือไม่
 local function IsBehindWall(targetHead)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return false end
     local origin = LocalPlayer.Character.Head.Position
@@ -111,7 +105,6 @@ local function IsBehindWall(targetHead)
     return result and result.Instance and not result.Instance:IsDescendantOf(targetHead.Parent)
 end
 
--- ตรวจ IgnorePlayers
 local function IsIgnored(plr)
     for _, name in ipairs(IgnorePlayers) do
         if string.lower(plr.Name) == string.lower(name) then
@@ -121,7 +114,6 @@ local function IsIgnored(plr)
     return false
 end
 
--- หาเป้าหมายใกล้ FOV และไม่เกินระยะล็อค
 local function GetClosestTarget()
     local closest
     local shortest = math.huge
@@ -145,7 +137,6 @@ local function GetClosestTarget()
     return closest
 end
 
--- เช็คว่าถือปืนได้
 local function IsHoldingAllowedGun(args)
     local ok, weapon = pcall(function() return args[3] end)
     if ok and typeof(weapon) == "Instance" and GunLookup[weapon.Name] then return true end
@@ -157,7 +148,6 @@ local function IsHoldingAllowedGun(args)
     return false
 end
 
--- Hook ยิง
 local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
 local oldFire
 oldFire = hookfunction(send.FireServer, function(self, ...)
@@ -193,7 +183,6 @@ oldFire = hookfunction(send.FireServer, function(self, ...)
     return oldFire(self, unpack(args))
 end)
 
--- Render FOV + Tracer
 RunService.RenderStepped:Connect(function()
     fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     fovCircle.Radius = FOVRadiusValue.Value
@@ -223,7 +212,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- WindUI Controls
 CombatTab:Toggle({
     Title = "Silent Aim [ ยิงกันLockได้  ]",
     Value = SilentAimEnabledValue.Value,
@@ -283,7 +271,6 @@ CombatTab:Input({
     end
 })
 
--- อัพเดท IgnorePlayers ทุก 60 วินาที (ลบคนที่ออกจากเกม)
 task.spawn(function()
     while true do
         task.wait(60)
@@ -312,24 +299,19 @@ local GunModule = require(ReplicatedStorage.Modules.Game.ItemTypes.Gun)
 
 getgenv().NoRecoilEnabled = false
 
--- เก็บฟังก์ชัน recoil เดิมไว้ก่อน
 local original_recoil = GunModule.apply_recoil
 local antiLoop = nil
 
--- ฟังก์ชันปิด Recoil (เปิดใช้งาน)
 local function EnableNoRecoil()
     if getgenv().NoRecoilEnabled then return end
     getgenv().NoRecoilEnabled = true
 
-    -- override apply_recoil
     GunModule.apply_recoil = function(arg1)
         if arg1 and arg1.instance then
             arg1.instance:SetAttribute("Recoil", 0)
         end
-        -- ไม่เรียก original เพื่อตัด recoil 100%
     end
 
-    -- loop บังคับ Recoil = 0
     antiLoop = task.spawn(function()
         while getgenv().NoRecoilEnabled do
             local char = Players.LocalPlayer.Character
@@ -348,27 +330,22 @@ local function EnableNoRecoil()
         end
     end)
 
-    print("✅ No Recoil: ON")
 end
 
--- ฟังก์ชันคืนค่าปกติ (ปิดใช้งาน)
+
 local function DisableNoRecoil()
     if not getgenv().NoRecoilEnabled then return end
     getgenv().NoRecoilEnabled = false
 
-    -- คืน recoil function เดิม
     GunModule.apply_recoil = original_recoil
 
-    -- หยุด loop
     if antiLoop then
         task.cancel(antiLoop)
         antiLoop = nil
     end
 
-    print("❌ No Recoil: OFF (กลับไปใช้ recoil ปกติ)")
 end
 
--- 🌟 ฟังก์ชัน Toggle สำหรับ UI
 function ToggleNoRecoil(state)
     if state then
         EnableNoRecoil()
@@ -398,7 +375,6 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 getgenv().HitAuraEnabled = false
 
--- หา CounterTable จาก getgc
 local CounterTable
 pcall(function()
     for _, Obj in ipairs(getgc(true)) do
@@ -415,7 +391,6 @@ pcall(function()
     SendRemote = Remotes:WaitForChild("Send", 5)
 end)
 
--- NetSend
 local function NetSend(...)
     if not CounterTable or not CounterTable.event or not SendRemote then
         return
@@ -427,7 +402,6 @@ local function NetSend(...)
     end)
 end
 
--- getActiveTool
 local function getActiveTool()
     local char = player.Character
     if not char then return nil end
@@ -439,7 +413,6 @@ local function getActiveTool()
     return nil
 end
 
--- getPlayersInRange
 local function getPlayersInRange(radius)
     local inRange = {}
     local char = player.Character
@@ -457,7 +430,6 @@ local function getPlayersInRange(radius)
     return inRange
 end
 
--- AttackNearby
 local function AttackNearby()
     local tool = getActiveTool()
     if not tool then return end
@@ -473,7 +445,6 @@ local function AttackNearby()
     end
 end
 
--- Auto Loop
 local autoLoop
 local function StartHitAura()
     if autoLoop then return end
@@ -493,7 +464,6 @@ local function StopHitAura()
     end
 end
 
--- 🌟 ฟังก์ชัน Toggle (เรียกจาก UI)
 function ToggleHitAura(state)
     if state then
         getgenv().HitAuraEnabled = true
@@ -533,7 +503,6 @@ CheaterTab:Slider({
 })
 
 
--- Toggle เปิด/ปิด Speed
 CheaterTab:Toggle({
     Title = "Speed",
     Value = SpeedEnabled,
@@ -565,14 +534,12 @@ local LocalPlayer = Players.LocalPlayer
 local JumpEnabled = false
 local flying = false
 
--- ค่ากระโดด
 local jumpPower = 25
 local jumpHeight = 25
 local defaultJumpPower = 50
 local defaultJumpHeight = 7.2
 local flySpeed = 45
 
--- ฟังก์ชันปรับกระโดด
 local function ApplyJump(hum)
     if hum then
         hum.JumpPower = jumpPower
@@ -580,7 +547,6 @@ local function ApplyJump(hum)
     end
 end
 
--- ฟังก์ชันคืนค่าเดิม
 local function RemoveJump(hum)
     if hum then
         hum.JumpPower = defaultJumpPower
@@ -588,7 +554,6 @@ local function RemoveJump(hum)
     end
 end
 
--- อัปเดต Humanoid ใหม่ตอน CharacterAdded
 local function GetHumanoid()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -602,7 +567,6 @@ local function GetRoot()
     return char:FindFirstChild("HumanoidRootPart")
 end
 
--- จัดการกดกระโดด
 UIS.JumpRequest:Connect(function()
     if not JumpEnabled then return end
     flying = true
@@ -613,7 +577,6 @@ UIS.JumpRequest:Connect(function()
     end
 end)
 
--- ปล่อยกระโดดหยุดบิน
 UIS.InputEnded:Connect(function(input)
     if not JumpEnabled then return end
     if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType == Enum.UserInputType.Touch then
@@ -621,7 +584,6 @@ UIS.InputEnded:Connect(function(input)
     end
 end)
 
--- Loop อัปเดตการบินทุกเฟรม
 RunService.RenderStepped:Connect(function()
     if not JumpEnabled then return end
     local root = GetRoot()
@@ -631,12 +593,10 @@ RunService.RenderStepped:Connect(function()
     if flying then
         root.Velocity = Vector3.new(root.Velocity.X, flySpeed, root.Velocity.Z)
     else
-        -- ใช้แรงดึงตามปกติของเกม
         root.Velocity = Vector3.new(root.Velocity.X, -30, root.Velocity.Z)
     end
 end)
 
--- Toggle เปิด/ปิด Jump+Fly
 CheaterTab:Toggle({
     Title = "Jump",
     Value = JumpEnabled,
@@ -652,7 +612,6 @@ CheaterTab:Toggle({
     end
 })
 
--- อัปเดต Jump ตลอดเวลา
 RunService.RenderStepped:Connect(function()
     if JumpEnabled and LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -662,7 +621,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ตรวจจับ Spawn ใหม่หลังตาย
 LocalPlayer.CharacterAdded:Connect(function(char)
     if JumpEnabled then
         char:WaitForChild("Humanoid")
@@ -675,7 +633,6 @@ end)
 
 CheaterTab:Divider()
 
--- ฟังก์ชันลบ BillboardGui ทุกตัวในตัวละคร
 local function RemoveBillboardGui()
     local char = LocalPlayer.Character
     if char then
@@ -699,7 +656,6 @@ CheaterTab:Toggle({
     end
 })
 
--- อัปเดต BillboardGui ทุกเฟรม (Realtime)
 RunService.RenderStepped:Connect(function()
     if HideNameEnabled and LocalPlayer.Character then
         for _, gui in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -710,7 +666,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ตรวจจับตอน Spawn ใหม่
 LocalPlayer.CharacterAdded:Connect(function(char)
     if HideNameEnabled then
         -- ตรวจสอบทุกตัวลูกที่ถูกสร้างใน Character ใหม่
@@ -720,7 +675,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
             end
         end)
         
-        -- ลบที่มีอยู่แล้วใน Character
         RemoveBillboardGui()
     end
 end)
@@ -754,14 +708,12 @@ CheaterTab:Toggle({
     end
 })
 
--- ตัวแปร
 local UndergroundEnabled = false
-local UndergroundAutoEnabled = true -- toggle เปิด/ปิด
-local UndergroundDepth = 50       -- ความลึก
-local SpinSpeed = 2080            -- ความเร็วหมุนรอบตัว
-local UndergroundAngle = 0        -- มุมหมุน
+local UndergroundAutoEnabled = true 
+local UndergroundDepth = 50
+local SpinSpeed = 2080
+local UndergroundAngle = 0
 
--- ฟังก์ชันเริ่มมุด
 local function StartUnderground()
     local char = LocalPlayer.Character
     if not char then return end
@@ -785,17 +737,14 @@ local function StartUnderground()
         local offsetZ = math.sin(rad) * 6
         local newPos = Vector3.new(hrp.Position.X + offsetX, initialY, hrp.Position.Z + offsetZ)
 
-        -- หมุนหันไปจุดเดิมกลางตัว
         hrp.CFrame = CFrame.new(newPos, Vector3.new(hrp.Position.X, initialY, hrp.Position.Z))
     end)
 end
 
--- ฟังก์ชันหยุดมุด
 local function StopUnderground()
     UndergroundEnabled = false
 end
 
--- ฟังก์ชันตรวจ Anti Ragdoll (ไม่ล้ม)
 local function AntiRagdoll()
     local char = LocalPlayer.Character
     if not char then return end
@@ -810,14 +759,12 @@ local function AntiRagdoll()
     end
 end
 
--- อัปเดตทุกเฟรม
 RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
     local humanoid = char:FindFirstChild("Humanoid")
     if not humanoid then return end
 
-    -- Underground Auto
     if UndergroundAutoEnabled then
         if humanoid.Health < 16 and humanoid.Health > 0 then
             if not UndergroundEnabled then StartUnderground() end
@@ -826,11 +773,9 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Anti Ragdoll
     AntiRagdoll()
 end)
 
--- Toggle ปุ่ม UI
 CheaterTab:Toggle({
     Title = "Anti Kill",
     Value = UndergroundAutoEnabled,
@@ -840,7 +785,6 @@ CheaterTab:Toggle({
     end
 })
 
--- อัปเดตกรณีตายหรือ Respawn
 Players.LocalPlayer.CharacterAdded:Connect(function(char)
     if UndergroundAutoEnabled then
         UndergroundEnabled = false
@@ -854,7 +798,6 @@ local player = Players.LocalPlayer
 
 local CounterTable
 
--- หา CounterTable
 local function findCounter()
     for _, obj in ipairs(getgc(true)) do
         if typeof(obj) == "table" and rawget(obj, "event") and rawget(obj, "func") then
@@ -864,7 +807,6 @@ local function findCounter()
     return nil
 end
 
--- ฟังก์ชันเริ่ม Anti Ragdoll
 local function startAntiRagdoll()
     CounterTable = findCounter()
     if not CounterTable then
@@ -892,7 +834,6 @@ local function startAntiRagdoll()
     end)
 end
 
--- WindUI Toggle
 CheaterTab:Toggle({
     Title = "Anti Ragdoll",
     Value = AntiRagdollEnabled,
@@ -907,7 +848,6 @@ CheaterTab:Toggle({
     end
 })
 
--- Auto start เมื่อ respawn
 player.CharacterAdded:Connect(function()
     if AntiRagdollEnabled then
         wait(1)
@@ -923,10 +863,8 @@ local player = Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
 local rootPart = char:WaitForChild("HumanoidRootPart")
 
--- เก็บสถานะ Toggle ไว้
 local PickupEnabled = false
 
--- หา CounterTable
 local CounterTable
 pcall(function()
     for _, Obj in ipairs(getgc(true)) do
@@ -937,7 +875,6 @@ pcall(function()
     end
 end)
 
--- NetGet Function
 local function NetGet(...)
     if not CounterTable or not CounterTable.func then return end
     local args = {...}
@@ -950,7 +887,6 @@ local function NetGet(...)
     return result
 end
 
--- ฟังก์ชันตรวจสอบและเก็บไอเท็ม
 local function CheckAndPickup()
     if not PickupEnabled then return end
     if not rootPart or not rootPart.Parent then return end
@@ -975,7 +911,6 @@ local function CheckAndPickup()
     end
 end
 
--- อัปเดต char ใหม่เมื่อ Spawn / ตาย
 local function UpdateChar(newChar)
     char = newChar
     rootPart = char:WaitForChild("HumanoidRootPart")
@@ -986,10 +921,8 @@ if char then
     UpdateChar(char)
 end
 
--- Loop ทุกเฟรม
 RunService.Heartbeat:Connect(CheckAndPickup)
 
--- WindUI Toggle
 CheaterTab:Toggle({
     Title = "Pickup Items",
     Value = PickupEnabled,
@@ -1020,7 +953,7 @@ CheaterTab:Section({Title="Snap PC key [ Z ]"})
 local SnapHeightOffset = -7
 local SnapDirection = "Down"
 local SnapDuration = 0.1
-local SnapBlockDuration = 3 -- ระยะเวลาบล็อกอยู่
+local SnapBlockDuration = 3
 local isRunning = false
 
 local function SnapQuick()
@@ -1032,7 +965,6 @@ local function SnapQuick()
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then isRunning=false return end
 
-    -- สร้างบล็อก Neon สีขาวโปร่งแสงรอบตัว
     local blocks = {}
     for _, part in ipairs(char:GetChildren()) do
         if part:IsA("BasePart") then
@@ -1049,7 +981,6 @@ local function SnapQuick()
         end
     end
 
-    -- ตั้งเวลาให้ลบบล็อกหลัง 5 วินาที
     task.spawn(function()
         task.wait(SnapBlockDuration)
         for _, blk in ipairs(blocks) do
@@ -1057,19 +988,16 @@ local function SnapQuick()
         end
     end)
 
-    -- เริ่มมุด
     hum.Sit = true
     local origY = hrp.Position.Y
     local offset = math.abs(SnapHeightOffset)
     if SnapDirection == "Down" then offset = -offset end
 
-    -- อัพเดทตำแหน่งแบบ real-time ตามตัว
     local conn
     conn = RunService.RenderStepped:Connect(function()
         if hrp and hrp.Parent then
             hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position.X, origY+offset, hrp.Position.Z),0.8)
 
-            -- อัพเดทบล็อกให้ตามตัวตลอดเวลา
             for i, part in ipairs(char:GetChildren()) do
                 if part:IsA("BasePart") and blocks[i] then
                     local blk = blocks[i]
@@ -1087,7 +1015,6 @@ local function SnapQuick()
     isRunning=false
 end
 
--- ปุ่มและ Hotkey
 CheaterTab:Button({
     Title="Snap Click",
     Locked=false,
@@ -1124,24 +1051,19 @@ local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer  
 local camera = Workspace.CurrentCamera  
 
--- Config  
 local BOX_COLOR = Color3.fromRGB(255, 255, 255)  
 local BOX_THICKNESS = 2  
 local SCALE_MULTIPLIER = 1  
-
--- Table เก็บ ESP แต่ละคน  
+  
 local espPlayers = {}  
 
--- ตัวแปรล็อคเป้า (สมมติว่ามีในโค้ดล็อคของคุณ)  
-local CurrentTarget = nil  -- กำหนดให้ระบบล็อคเป้าต้องอัพเดตตรงนี้  
+local CurrentTarget = nil
 
--- แปลงตำแหน่งโลกเป็นหน้าจอ  
 local function worldToViewport(pos)  
     local screen, onScreen = camera:WorldToViewportPoint(pos)  
     return Vector2.new(screen.X, screen.Y), onScreen  
 end  
 
--- สร้าง Box ESP  
 local function createBoxESP(plr)  
     if espPlayers[plr] or plr == LocalPlayer then return end  
 
@@ -1185,7 +1107,6 @@ local function createBoxESP(plr)
             return  
         end  
 
-        -- เปลี่ยนสีถ้าเป็นเป้าหมายปัจจุบัน  
         local color = (CurrentTarget == plr) and Color3.fromRGB(255,0,0) or BOX_COLOR  
 
         local edges = {  
@@ -1205,8 +1126,7 @@ local function createBoxESP(plr)
 
     espPlayers[plr] = {connection = connection, lines = lines}  
 end  
-
--- ลบ Box ESP  
+ 
 local function removeBoxESP(plr)  
     if espPlayers[plr] then  
         if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end  
@@ -1215,28 +1135,24 @@ local function removeBoxESP(plr)
     end  
 end  
 
--- สร้าง ESP ทั้งหมด  
 local function enableAllESP()  
     for _, plr in pairs(Players:GetPlayers()) do  
         if plr ~= LocalPlayer then createBoxESP(plr) end  
     end  
 end  
-
--- ลบ ESP ทั้งหมด  
+  
 local function disableAllESP()  
     for plr, _ in pairs(espPlayers) do  
         removeBoxESP(plr)  
     end  
 end  
 
--- Player Added/Removing  
 Players.PlayerAdded:Connect(function(plr)  
     task.wait(1)  
     if _G.ESPEnabled then createBoxESP(plr) end  
 end)  
 Players.PlayerRemoving:Connect(removeBoxESP)  
 
--- WindUi Toggle  
 EspTab:Toggle({  
     Title = "Box",  
     Icon = "eye",  
@@ -1257,7 +1173,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 
--- BoolValue สำหรับเปิด/ปิด ESP
 local ESPNameEnabled = Instance.new("BoolValue")
 ESPNameEnabled.Name = "ESPNameEnabled"
 ESPNameEnabled.Value = false
@@ -1268,9 +1183,8 @@ ESPDistanceEnabled.Name = "ESPDistanceEnabled"
 ESPDistanceEnabled.Value = false
 ESPDistanceEnabled.Parent = LocalPlayer
 
-local espDistanceTable = {} -- เก็บ GUI ระยะของแต่ละผู้เล่น
+local espDistanceTable = {}
 
--- ฟังก์ชันสร้าง/อัพเดท ESP Name
 local function UpdateNameESP()
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
@@ -1309,7 +1223,6 @@ local function UpdateNameESP()
     end
 end
 
--- ฟังก์ชันสร้าง/อัพเดท Distance ESP
 local function UpdateDistanceESP()
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local localPos = LocalPlayer.Character.HumanoidRootPart.Position
@@ -1357,7 +1270,6 @@ local function UpdateDistanceESP()
     end
 end
 
--- Loop อัพเดททุก 1 วินาที
 task.spawn(function()
     while true do
         task.wait(1)
@@ -1366,7 +1278,6 @@ task.spawn(function()
     end
 end)
 
--- Player Added / Removing
 Players.PlayerAdded:Connect(function(plr)
     task.wait(0.5)
     UpdateNameESP()
@@ -1383,7 +1294,6 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
--- WindUI Toggle
 EspTab:Toggle({
     Title = "ESP Name",
     Icon = "circle-check",
@@ -1406,15 +1316,13 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- BoolValue เปิด/ปิด Health Bar
 local ESPHealthEnabled = Instance.new("BoolValue")
 ESPHealthEnabled.Name = "ESPHealthEnabled"
 ESPHealthEnabled.Value = false
 ESPHealthEnabled.Parent = LocalPlayer
 
-local healthBars = {} -- เก็บ GUI ของแต่ละผู้เล่น
+local healthBars = {}
 
--- ฟังก์ชันสร้าง Health Bar แนวนอน
 local function CreateHealthBar(plr)
     if plr == LocalPlayer then return end
     if not plr.Character or not plr.Character:FindFirstChild("Humanoid") then return end
@@ -1427,13 +1335,12 @@ local function CreateHealthBar(plr)
     local bar = Instance.new("BillboardGui")
     bar.Name = "HealthESP"
     bar.Adornee = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("Head")
-    bar.Size = UDim2.new(0, 30, 0, 3) -- กว้าง 60 สูง 6 studs
-    bar.StudsOffset = Vector3.new(0, -5, 0) -- วางเหนือหัว
+    bar.Size = UDim2.new(0, 30, 0, 3)
+    bar.StudsOffset = Vector3.new(0, -5, 0)
     bar.AlwaysOnTop = true
     bar.LightInfluence = 0
     bar.Parent = plr.Character
 
-    -- พื้นหลังสีดำ
     local bg = Instance.new("Frame")
     bg.Size = UDim2.new(1,0,1,0)
     bg.Position = UDim2.new(0,0,0,0)
@@ -1441,18 +1348,16 @@ local function CreateHealthBar(plr)
     bg.BorderSizePixel = 0
     bg.Parent = bar
 
-    -- Bar หลัก
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1,0,1,0)
     frame.Position = UDim2.new(0,0,0,0)
-    frame.BackgroundColor3 = Color3.fromRGB(144,238,144) -- เขียวอ่อนเริ่มต้น
+    frame.BackgroundColor3 = Color3.fromRGB(144,238,144)
     frame.BorderSizePixel = 0
     frame.Parent = bg
 
     healthBars[plr] = {bar = bar, bg = bg, frame = frame, humanoid = humanoid}
 end
 
--- อัพเดท Health Bar ทุกเฟรม
 RunService.RenderStepped:Connect(function()
     if not ESPHealthEnabled.Value then
         for plr, data in pairs(healthBars) do
@@ -1475,11 +1380,11 @@ RunService.RenderStepped:Connect(function()
 
                 -- สีอ่อนตามเลือด
                 if percent > 0.5 then
-                    data.frame.BackgroundColor3 = Color3.fromRGB(144,238,144) -- เขียวอ่อน
+                    data.frame.BackgroundColor3 = Color3.fromRGB(144,238,144)
                 elseif percent > 0.25 then
-                    data.frame.BackgroundColor3 = Color3.fromRGB(255,255,102) -- เหลืองอ่อน
+                    data.frame.BackgroundColor3 = Color3.fromRGB(255,255,102)
                 else
-                    data.frame.BackgroundColor3 = Color3.fromRGB(255,102,102) -- แดงอ่อน
+                    data.frame.BackgroundColor3 = Color3.fromRGB(255,102,102)
                 end
                 data.bar.Enabled = true
             end
@@ -1487,7 +1392,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ผู้เล่นใหม่
 Players.PlayerAdded:Connect(function(plr)
     task.wait(0.5)
     if ESPHealthEnabled.Value then
@@ -1503,7 +1407,6 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
--- WindUI Toggle
 EspTab:Toggle({
     Title = "Health",
     Default = false,
@@ -1512,16 +1415,11 @@ EspTab:Toggle({
     end
 })
 
-
-
--- // ===== ESP HIGHLIGHT ===== // --
-
 local ESPEnabledValue = Instance.new("BoolValue")
 ESPEnabledValue.Name = "ESPEnabled"
 ESPEnabledValue.Value = false
 ESPEnabledValue.Parent = LocalPlayer
 
--- ฟังก์ชันสร้าง Highlight
 local function CreateESP(player)
     if not player.Character then return end
     if player.Character:FindFirstChild("ESP_HIGHLIGHT") then return end
@@ -1536,14 +1434,12 @@ local function CreateESP(player)
     highlight.Parent = player.Character
 end
 
--- ลบ ESP ถ้าปิด
 local function RemoveESP(player)
     if player.Character and player.Character:FindFirstChild("ESP_HIGHLIGHT") then
         player.Character.ESP_HIGHLIGHT:Destroy()
     end
 end
 
--- อัปเดต ESP ทุกเฟรม
 RunService.RenderStepped:Connect(function()
     if not ESPEnabledValue.Value then
         -- ปิด ESP ลบทุกคนออก
@@ -1555,7 +1451,6 @@ RunService.RenderStepped:Connect(function()
         return
     end
 
-    -- เปิด ESP → เพิ่ม highlight ทุกคน
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then
             if plr.Character then
@@ -1565,7 +1460,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- อัปเดตชื่อผู้เล่นทุก 60 วิ
 task.spawn(function()
     while true do
         task.wait(3)
@@ -1580,7 +1474,6 @@ task.spawn(function()
     end
 end)
 
--- WindUI ปุ่มเปิดปิด
 EspTab:Toggle({
     Title = "Highlight",
     Value = ESPEnabledValue.Value,
@@ -1588,7 +1481,6 @@ EspTab:Toggle({
         ESPEnabledValue.Value = state
         
         if not state then
-            -- ปิด ESP → ลบทั้งหมด
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr ~= LocalPlayer then
                     RemoveESP(plr)
@@ -1598,17 +1490,15 @@ EspTab:Toggle({
     end
 })
 
--- ตัวแปรเปิดปิด
 local ESPEnabledValue = Instance.new("BoolValue")
 ESPEnabledValue.Value = false
 ESPEnabledValue.Name = "ESPEnabled"
 ESPEnabledValue.Parent = LocalPlayer
 
-local tracerLines = {} -- เก็บเส้น tracer ของแต่ละผู้เล่น
+local tracerLines = {}
 local hue = 0
-local updateInterval = 1 -- วินาทีอัพเดท player list
+local updateInterval = 1 
 
--- สร้างหรืออัพเดท tracer สำหรับผู้เล่น
 local function UpdateTracers()
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
@@ -1623,7 +1513,6 @@ local function UpdateTracers()
         end
     end
 
-    -- ลบผู้เล่นที่ออกจากเกม
     for player, line in pairs(tracerLines) do
         if not player.Parent or not player.Character then
             line:Remove()
@@ -1632,9 +1521,8 @@ local function UpdateTracers()
     end
 end
 
--- ฟังก์ชันอัพเดทเส้น tracer ทุกเฟรม
 RunService.RenderStepped:Connect(function()
-    hue = (hue + 0.0001) % 1 -- เปลี่ยนสีรุ้งช้ามาก
+    hue = (hue + 0.0001) % 1
 
     if not ESPEnabledValue.Value then
         for _, line in pairs(tracerLines) do
@@ -1661,7 +1549,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- อัพเดท list player ทุก 1 วินาที
 task.spawn(function()
     while true do
         task.wait(updateInterval)
@@ -1669,7 +1556,6 @@ task.spawn(function()
     end
 end)
 
--- อัพเดททันทีตอนผู้เล่นเข้ามา
 Players.PlayerAdded:Connect(function()
     UpdateTracers()
 end)
@@ -1681,10 +1567,8 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
--- เริ่มอัพเดทตอนเริ่มรัน
 UpdateTracers()
 
--- WindUI ปุ่มเปิดปิด ESP Tracer
 EspTab:Toggle({
     Title = "Tracer",
     Value = ESPEnabledValue.Value,
@@ -1720,7 +1604,6 @@ local RARITY_COLORS = {
     ["Omega"] = Color3.fromRGB(255, 120, 120),
 }
 
--- ฟังก์ชันสร้าง key ของ Tool
 local function generateUniqueKey(tool)
     if not tool or not tool:IsA("Tool") then return nil end
 
@@ -1752,7 +1635,6 @@ local function generateUniqueKey(tool)
     return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
 end
 
--- ลงทะเบียน Tool ทั้งหมด
 local function registerItems(folder)
     for _, tool in ipairs(folder:GetDescendants()) do
         if not tool:IsA("Tool") then continue end
@@ -1799,7 +1681,6 @@ local function getWeaponInfo(tool)
     return WeaponDB[key]
 end
 
--- สร้าง Billboard สำหรับผู้เล่น
 local function createBillboardForPlayer(player)
     if player == LocalPlayer then return end
 
@@ -1844,7 +1725,6 @@ local function createBillboardForPlayer(player)
             BillboardCache[player] = billboard
         end
 
-        -- อัปเดต Tool
         local container = BillboardCache[player]:FindFirstChildOfClass("Frame")
         if container then
             container:ClearAllChildren()
@@ -1870,7 +1750,6 @@ local function createBillboardForPlayer(player)
         end
     end
 
-    -- อัปเดตทันทีและทุก 1 วินาที
     task.spawn(function()
         while ItemESP_Enabled and player.Parent do
             pcall(updateESP)
@@ -1878,7 +1757,6 @@ local function createBillboardForPlayer(player)
         end
     end)
 
-    -- เก็บ connection
     ItemESP_UpdateConnections[player] = {}
     if player.Character then
         table.insert(ItemESP_UpdateConnections[player], player.Character.ChildAdded:Connect(function()
@@ -1894,7 +1772,6 @@ local function createBillboardForPlayer(player)
     end
 end
 
--- ฟังก์ชันอัปเดตทุกคน (สร้าง Billboard ใหม่ถ้าหาย)
 local function UpdateAllItemESP()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
@@ -1906,7 +1783,6 @@ local function UpdateAllItemESP()
     end
 end
 
--- Loop อัปเดตทุก 1 วินาที
 task.spawn(function()
     while true do
         task.wait(1)
@@ -1914,7 +1790,6 @@ task.spawn(function()
     end
 end)
 
--- Player Added/Removed
 Players.PlayerAdded:Connect(function(p)
     if p ~= LocalPlayer and ItemESP_Enabled then
         task.wait(0.1)
@@ -1934,7 +1809,6 @@ Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
--- WindUI Toggle
 EspTab:Toggle({
     Title = "Item",
     Icon = "circle-check",
@@ -1969,30 +1843,26 @@ local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
-local ItemESP_Enabled = false  -- ตัวแปรเปิดปิด ESP
-local ESP_Items = {}  -- เก็บ Highlight + Drawing ของแต่ละไอเทม
+local ItemESP_Enabled = false
+local ESP_Items = {}
 
--- สีม่วงสว่างแบบเท่ ๆ
 local HIGHLIGHT_COLOR = Color3.fromRGB(200, 0, 255)
 local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
 
--- โฟลเดอร์ของตก (รองรับทั้ง DroppedItem และ DroppedItems)
 local droppedFolder = Workspace:FindFirstChild("DroppedItem") or Workspace:FindFirstChild("DroppedItems")
 if not droppedFolder then
     warn("ไม่พบโฟลเดอร์ DroppedItem / DroppedItems")
     return
 end
 
--- ฟังก์ชันสร้าง ESP ให้ไอเทม 1 ชิ้น
 local function createItemESP(item)
     if not ItemESP_Enabled then return end
-    if ESP_Items[item] then return end  -- ถ้ามีแล้วไม่ทำซ้ำ
-    if item.Name == "Money" then return end  -- ยกเว้น Money
+    if ESP_Items[item] then return end
+    if item.Name == "Money" then return end
     if not item:FindFirstChild("Handle") and not item.PrimaryPart then return end
 
     local handle = item:FindFirstChild("Handle") or item.PrimaryPart
 
-    -- Highlight สีม่วงสว่าง
     local highlight = Instance.new("Highlight")
     highlight.FillColor = HIGHLIGHT_COLOR
     highlight.OutlineColor = HIGHLIGHT_COLOR
@@ -2001,7 +1871,6 @@ local function createItemESP(item)
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Parent = item
 
-    -- ชื่อไอเทม (Drawing Text)
     local nameText = Drawing.new("Text")
     nameText.Size = 16
     nameText.Color = TEXT_COLOR
@@ -2011,7 +1880,6 @@ local function createItemESP(item)
     nameText.Visible = true
     nameText.Text = item.Name
 
-    -- ระยะทาง (Drawing Text)
     local distanceText = Drawing.new("Text")
     distanceText.Size = 10
     distanceText.Color = TEXT_COLOR
@@ -2020,7 +1888,6 @@ local function createItemESP(item)
     distanceText.Font = 2
     distanceText.Visible = true
 
-    -- เก็บไว้ในตาราง
     ESP_Items[item] = {
         highlight = highlight,
         name = nameText,
@@ -2028,7 +1895,6 @@ local function createItemESP(item)
         handle = handle
     }
 
-    -- ลบเมื่อไอเทมหาย
     item.AncestryChanged:Connect(function()
         if not item.Parent then
             if ESP_Items[item] then
@@ -2041,10 +1907,8 @@ local function createItemESP(item)
     end)
 end
 
--- ฟังก์ชันเปิด ESP
 local function enableItemESP()
     ItemESP_Enabled = true
-    -- สแกนของเดิม
     for _, item in pairs(droppedFolder:GetChildren()) do
         if item:IsA("Model") or item:IsA("Tool") or item:IsA("Folder") then
             task.spawn(function()
@@ -2055,7 +1919,6 @@ local function enableItemESP()
     end
 end
 
--- ฟังก์ชันปิด ESP
 local function disableItemESP()
     ItemESP_Enabled = false
     for item, data in pairs(ESP_Items) do
@@ -2066,7 +1929,6 @@ local function disableItemESP()
     ESP_Items = {}
 end
 
--- อัปเดตตำแหน่งชื่อ + ระยะทางทุกเฟรม
 RunService.Heartbeat:Connect(function()
     if not ItemESP_Enabled then return end
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
@@ -2092,7 +1954,6 @@ RunService.Heartbeat:Connect(function()
                 data.distance.Visible = false
             end
         else
-            -- ลบถ้าไอเทมหาย
             if data.highlight then data.highlight:Destroy() end
             if data.name then data.name:Remove() end
             if data.distance then data.distance:Remove() end
@@ -2101,13 +1962,11 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- เมื่อมีของตกใหม่
 droppedFolder.ChildAdded:Connect(function(item)
     task.wait(0.5)
     createItemESP(item)
 end)
 
--- ตัวอย่าง WindUI Toggle
 EspTab:Toggle({
     Title = "Dropped Items",
     Value = ItemESP_Enabled,
@@ -2165,7 +2024,6 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = game.Players.LocalPlayer
 
--- ฟังก์ชันดึงรายชื่อเซิร์ฟเวอร์
 local function GetServers(cursor)
     local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100%s"):format(
         PlaceId,
@@ -2311,17 +2169,14 @@ local Lighting = game:GetService("Lighting")
 local OriginalSky = {}
 local OriginalParts = {}
 
--- โทนเทาแบบสบายตา
 local grayColor = Color3.fromRGB(180,180,180)
 
--- บันทึก Sky เดิม
 for _, v in ipairs(Lighting:GetChildren()) do
     if v:IsA("Sky") then
         table.insert(OriginalSky, v)
     end
 end
 
--- บันทึกข้อมูลของ Part เดิม
 local function SaveOriginal(part)
     if OriginalParts[part] then return end
     OriginalParts[part] = {
@@ -2332,12 +2187,10 @@ local function SaveOriginal(part)
 end
 
 local function BoostFPS_Enable()
-    -- ลบ Sky
     for _, v in ipairs(Lighting:GetChildren()) do
         if v:IsA("Sky") then v:Destroy() end
     end
 
-    -- เปลี่ยนสี + ลบภาพ
     for _, obj in ipairs(workspace:GetDescendants()) do
 
         if obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("SurfaceAppearance") then
@@ -2358,12 +2211,10 @@ local function BoostFPS_Enable()
 end
 
 local function BoostFPS_Disable()
-    -- คืน Sky
-    for _, sky in ipairs(OriginalSky) do
+for _, sky in ipairs(OriginalSky) do
         sky.Parent = Lighting
     end
 
-    -- คืนค่าของ Part ทั้งหมด
     for part, data in pairs(OriginalParts) do
         if part and part.Parent then
             part.Color = data.Color
@@ -2374,6 +2225,7 @@ local function BoostFPS_Disable()
         end
     end
 end
+
 ServerTab:Section({Title="Server Mods  :"})
 
 ServerTab:Button({
@@ -2414,7 +2266,6 @@ ServerTab:Button({
     end
 })
 
--- ฟังก์ชันลบประตู DoorSystem และประตูทั้งหมด
 local function removeDoors()
     pcall(function()
         -- ลบโฟลเดอร์ DoorSystem
@@ -2422,7 +2273,6 @@ local function removeDoors()
             workspace.DoorSystem:Destroy()
         end
 
-        -- ลูปทุกอ็อบเจ็กต์ใน workspace
         for _, obj in pairs(workspace:GetDescendants()) do
             local name = obj.Name:lower()
             local parentName = obj.Parent and obj.Parent.Name:lower() or ""
@@ -2441,13 +2291,12 @@ local function removeDoors()
     end)
 end
 
--- สร้างปุ่ม WindUI สำหรับลบประตู
 ServerTab:Button({
     Title = "Remove Doors",
     Desc = "ลบประตูออก🚪",
     Locked = false,
     Callback = function()
-        removeDoors()  -- เรียกฟังก์ชันลบประตู
+        removeDoors()
         print("✅ DoorSystem & all doors removed!")
     end
 })
