@@ -1,176 +1,3 @@
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-local Players, RunService, Camera, LocalPlayer, ReplicatedStorage =
-    game:GetService("Players"),
-    game:GetService("RunService"),
-    workspace.CurrentCamera,
-    game.Players.LocalPlayer,
-    game:GetService("ReplicatedStorage")
-
-local Window = WindUI:CreateWindow({
-    Title = "Kaiju Hub | Pvp Paid 💵",
-    Icon = "gitlab",
-    Author = "My Kaiju  | BlockSpin🔫",
-    Folder = "XINCOHubFolder",
-    Size = UDim2.fromOffset(400, 350),
-    Theme = "Dark",
-    Transparent = true,
-    Resizable = true,
-})
-
-Window:Tag({
-    Title = "v 0.0.5 t",
-    Icon = "cloud",
-    Color = Color3.fromHex("#2889F7"),
-    Radius = 13,
-})
-
-local CombatTab = Window:Tab({Title = "COMBAT:", Icon = "crosshair"})
-CombatTab:Section({Title="GUN :"})
-
-local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "crosshair"})
-WeaponTab:Section({Title="Gun Mods :"})
-
-local CheaterTab = Window:Tab({Title = "CHEATER:", Icon = "user"})
-CheaterTab:Section({Title="CHEATER :"})
-
-local EspTab = Window:Tab({Title = "Esp", Icon = "eye"})
-EspTab:Section({Title="Esp PLAYER  :"})
-
-local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
-ServerTab:Section({Title="Server Hop  :"})
--- ค่าตัวแปร
-local SilentAimEnabledValue = Instance.new("BoolValue")
-SilentAimEnabledValue.Value = false
-SilentAimEnabledValue.Name = "SilentAimEnabled"
-SilentAimEnabledValue.Parent = LocalPlayer
-
-local MagicBulletValue = Instance.new("BoolValue")
-MagicBulletValue.Value = false
-MagicBulletValue.Name = "MagicBullet"
-MagicBulletValue.Parent = LocalPlayer
-
-local FOVRadiusValue = Instance.new("NumberValue")
-FOVRadiusValue.Value = 150
-FOVRadiusValue.Name = "FOVRadius"
-FOVRadiusValue.Parent = LocalPlayer
-
-local LockDistanceValue = Instance.new("NumberValue")
-LockDistanceValue.Value = 1000
-LockDistanceValue.Name = "LockDistance"
-LockDistanceValue.Parent = LocalPlayer
-
-local TargetPartValue = Instance.new("StringValue")
-TargetPartValue.Value = "Head"
-TargetPartValue.Name = "TargetPart"
-TargetPartValue.Parent = LocalPlayer
-
-local IgnorePlayers = {}
-
-local CurrentTarget, head, aimPos
-local hue = 0
-
-local GunNames = {
-    "P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9",
-    "Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"
-}
-local GunLookup = {}
-for _, name in pairs(GunNames) do GunLookup[name] = true end
-
-local fovCircle = Drawing.new("Circle")
-fovCircle.Thickness = 1
-fovCircle.NumSides = 100
-fovCircle.Radius = FOVRadiusValue.Value
-fovCircle.Filled = false
-fovCircle.Visible = SilentAimEnabledValue.Value
-fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-
-local tracerLine = Drawing.new("Line")
-tracerLine.Thickness = 2
-tracerLine.Visible = false
-
-local function GetPrediction(part)
-    if not part or not part.Parent then return Vector3.new() end
-    local partSize = (part:IsA("BasePart") and part.Size.Y or 1)
-    return part.Position + Vector3.new(0, partSize/3, 0)
-end
-
-local function IsBehindWall(targetHead)
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return false end
-    local origin = LocalPlayer.Character.Head.Position
-    local direction = targetHead.Position - origin
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Blacklist
-    params.FilterDescendantsInstances = {LocalPlayer.Character, targetHead.Parent}
-    local result = workspace:Raycast(origin, direction, params)
-    return result and result.Instance and not result.Instance:IsDescendantOf(targetHead.Parent)
-end
-
-local function IsIgnored(plr)
-    for _, name in ipairs(IgnorePlayers) do
-        if string.lower(plr.Name) == string.lower(name) then
-            return true
-        end
-    end
-    return false
-end
-
-local function GetClosestTarget()
-    local closest
-    local shortest = math.huge
-    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and not IsIgnored(player) and player.Character and player.Character:FindFirstChild("Head") then
-            local headPart = player.Character:FindFirstChild(TargetPartValue.Value) or player.Character:FindFirstChild("Head")
-            if player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health <= 0 then continue end
-            local distance = (headPart.Position - LocalPlayer.Character.Head.Position).Magnitude
-            if distance > LockDistanceValue.Value then continue end
-            local screenPos, onScreen = Camera:WorldToViewportPoint(headPart.Position)
-            if onScreen then
-                local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                if dist < FOVRadiusValue.Value and dist < shortest then
-                    shortest = dist
-                    closest = player
-                end
-            end
-        end
-    end
-    return closest
-end
-
-local function IsHoldingAllowedGun(args)
-    local ok, weapon = pcall(function() return args[3] end)
-    if ok and typeof(weapon) == "Instance" and GunLookup[weapon.Name] then return true end
-    for _, child in pairs(LocalPlayer.Character:GetChildren()) do
-        if (child:IsA("Tool") or child:IsA("Model")) and GunLookup[child.Name] then
-            return true
-        end
-    end
-    return false
-end
-
-local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
-local oldFire
-oldFire = hookfunction(send.FireServer, function(self, ...)
-    local args = {...}
-    if SilentAimEnabledValue.Value and IsHoldingAllowedGun(args) then
-        CurrentTarget = GetClosestTarget()
-        if CurrentTarget then
-            local part = CurrentTarget.Character:FindFirstChild(TargetPartValue.Value) or CurrentTarget.Character:FindFirstChild("Head")
-            head = part
-            aimPos = GetPrediction(part)
-
-            if MagicBulletValue.Value and IsBehindWall(head) then
-                args[4] = CFrame.new(1/0,1/0,1/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0)
-            else
-                args[4] = CFrame.new(LocalPlayer.Character.Head.Position, aimPos)
-            end
-
-            args[5] = {[1] = {[1] = {["Instance"] = head, ["Position"] = aimPos}}}
-
-            -- Beam สีรุ้ง
-            local ourHead = LocalPlayer.Character.Head
-            local distance = (aimPos - ourHead.Position).Magnitude
-            local beam = Instance.new("Part", workspace)
             beam.Anchored = true
             beam.CanCollide = false
             beam.Material = Enum.Material.Neon
@@ -271,6 +98,335 @@ CombatTab:Input({
     end
 })
 
+task.spawn(function()
+    while true do
+        task.wait(60)
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local Players, RunService, Camera, LocalPlayer, ReplicatedStorage =
+    game:GetService("Players"),
+    game:GetService("RunService"),
+    workspace.CurrentCamera,
+    game.Players.LocalPlayer,
+    game:GetService("ReplicatedStorage")
+
+-- สร้างหน้าต่าง
+local Window = WindUI:CreateWindow({
+    Title = "Kaiju Hub | Pvp Paid 💵",
+    Icon = "gitlab",
+    Author = "My Kaiju  | BlockSpin🔫",
+    Folder = "XINCOHubFolder",
+    Size = UDim2.fromOffset(400, 350),
+    Theme = "Dark",
+    Transparent = true,
+    Resizable = true,
+})
+
+Window:Tag({
+    Title = "v 0.0.2 t",
+    Icon = "cloud",
+    Color = Color3.fromHex("#2889F7"),
+    Radius = 13,
+})
+
+local CombatTab = Window:Tab({Title = "COMBAT:", Icon = "crosshair"})
+CombatTab:Section({Title="GUN :"})
+
+local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "crosshair"})
+WeaponTab:Section({Title="Gun Mods :"})
+
+-- ตัวแปร
+local SilentAimEnabledValue = Instance.new("BoolValue")
+SilentAimEnabledValue.Name = "SilentAimEnabled"
+SilentAimEnabledValue.Value = false
+SilentAimEnabledValue.Parent = LocalPlayer
+
+local MagicBulletValue = Instance.new("BoolValue")
+MagicBulletValue.Name = "MagicBullet"
+MagicBulletValue.Value = false
+MagicBulletValue.Parent = LocalPlayer
+
+local FOVRadiusValue = Instance.new("NumberValue")
+FOVRadiusValue.Name = "FOVRadius"
+FOVRadiusValue.Value = 150
+FOVRadiusValue.Parent = LocalPlayer
+
+local LockDistanceValue = Instance.new("NumberValue")
+LockDistanceValue.Name = "LockDistance"
+LockDistanceValue.Value = 1000
+LockDistanceValue.Parent = LocalPlayer
+
+local TargetPartValue = Instance.new("StringValue")
+TargetPartValue.Name = "TargetPart"
+TargetPartValue.Value = "Head"
+TargetPartValue.Parent = LocalPlayer
+
+local AttackAntiLockEnabledValue = Instance.new("BoolValue")
+AttackAntiLockEnabledValue.Name = "AttackAntiLockEnabled"
+AttackAntiLockEnabledValue.Value = false
+AttackAntiLockEnabledValue.Parent = LocalPlayer
+
+local IgnorePlayers = {}
+local CurrentTarget, head, aimPos
+local hue = 0
+
+-- ปืนที่รองรับ
+local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
+local GunLookup = {}
+for _, name in pairs(GunNames) do GunLookup[name] = true end
+
+-- FOV Circle
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 1
+fovCircle.NumSides = 100
+fovCircle.Radius = FOVRadiusValue.Value
+fovCircle.Filled = false
+fovCircle.Visible = SilentAimEnabledValue.Value
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+-- Tracer
+local tracerLine = Drawing.new("Line")
+tracerLine.Thickness = 1
+tracerLine.Visible = false
+
+-- คาดเดาตำแหน่ง (ปิด)
+local PREDICT = 0.165
+local function VelocityPrediction(part)
+    if not part or not part.Parent then return Vector3.new() end
+    local partSize = (part:IsA("BasePart") and part.Size.Y or 1)
+    local root = part.Parent:FindFirstChild("HumanoidRootPart")
+    local vel = root and root.Velocity or Vector3.new()
+    return part.Position + Vector3.new(0, partSize/2, 0) + vel * PREDICT
+end
+
+-- คาดเดาตำแหน่ง (เปิด Anti Lock)
+local PREDICTION_FACTOR = 3
+local LastHealth = {}
+local function AntiLockPrediction(part)
+    if not part or not part.Parent then return part.Position end
+    local root = part.Parent:FindFirstChild("HumanoidRootPart")
+    local humanoid = part.Parent:FindFirstChild("Humanoid")
+    if not humanoid then return part.Position end
+    local speed = root and root.Velocity.Magnitude or 0
+    local headPos = part.Position + Vector3.new(0, (part:IsA("BasePart") and part.Size.Y or 1)/2, 0)
+    
+    -- Health check
+    local hp = humanoid.Health
+    local lastHp = LastHealth[part.Parent] or hp
+    LastHealth[part.Parent] = hp
+
+    if hp <= 16 then
+        return headPos -- ยิงตรงหัวถ้าเลือดน้อย
+    end
+
+    -- ถ้า Anti Lock เปิด
+    if AttackAntiLockEnabledValue.Value then
+        local forward = part.CFrame.LookVector
+        local factor = 0
+        if speed < 14 then
+            factor = 0
+        elseif speed >= 14 then
+            factor = 6
+        end
+        return headPos + forward * factor
+    else
+        return VelocityPrediction(part)
+    end
+end
+
+-- ตรวจ IgnorePlayers
+local function IsIgnored(plr)
+    for _, name in ipairs(IgnorePlayers) do
+        if string.lower(plr.Name) == string.lower(name) then
+            return true
+        end
+    end
+    return false
+end
+
+-- หาเป้าหมายใกล้ FOV และไม่เกินระยะล็อค
+local function GetClosestTarget()
+    local closest
+    local shortest = math.huge
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and not IsIgnored(player) and player.Character and player.Character:FindFirstChild("Head") then
+            local headPart = player.Character:FindFirstChild(TargetPartValue.Value) or player.Character:FindFirstChild("Head")
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health <= 0 then continue end
+            local distance = (headPart.Position - LocalPlayer.Character.Head.Position).Magnitude
+            if distance > LockDistanceValue.Value then continue end
+            local screenPos, onScreen = Camera:WorldToViewportPoint(headPart.Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                if dist < FOVRadiusValue.Value and dist < shortest then
+                    shortest = dist
+                    closest = player
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- เช็คว่าถือปืนได้
+local function IsHoldingAllowedGun(args)
+    local ok, weapon = pcall(function() return args[3] end)
+    if ok and typeof(weapon) == "Instance" and GunLookup[weapon.Name] then return true end
+    for _, child in pairs(LocalPlayer.Character:GetChildren()) do
+        if (child:IsA("Tool") or child:IsA("Model")) and GunLookup[child.Name] then
+            return true
+        end
+    end
+    return false
+end
+
+-- Hook ยิง
+local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
+local oldFire
+oldFire = hookfunction(send.FireServer, function(self, ...)
+    local args = {...}
+    if SilentAimEnabledValue.Value and IsHoldingAllowedGun(args) then
+        CurrentTarget = GetClosestTarget()
+        if CurrentTarget then
+            local part = CurrentTarget.Character:FindFirstChild(TargetPartValue.Value) or CurrentTarget.Character:FindFirstChild("Head")
+            head = part
+            aimPos = AntiLockPrediction(part)
+
+            if MagicBulletValue.Value and (part and part.Parent and IsBehindWall(part)) then
+                args[4] = CFrame.new(1/0,1/0,1/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0)
+            else
+                args[4] = CFrame.new(LocalPlayer.Character.Head.Position, aimPos)
+            end
+
+            args[5] = {[1] = {[1] = {["Instance"] = head, ["Position"] = aimPos}}}
+
+            -- Beam สีรุ้ง
+            local ourHead = LocalPlayer.Character.Head
+            local distance = (aimPos - ourHead.Position).Magnitude
+            local beam = Instance.new("Part", workspace)
+            beam.Anchored = true
+            beam.CanCollide = false
+            beam.Material = Enum.Material.Neon
+            beam.Size = Vector3.new(0.15,0.15,distance)
+            beam.CFrame = CFrame.new(ourHead.Position, aimPos) * CFrame.new(0,0,-distance/2)
+            beam.Color = Color3.fromHSV(math.random(),1,1)
+            game:GetService("Debris"):AddItem(beam, 1)
+        end
+    end
+    return oldFire(self, unpack(args))
+end)
+
+-- ตรวจกำแพง
+function IsBehindWall(targetHead)
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return false end
+    local origin = LocalPlayer.Character.Head.Position
+    local direction = targetHead.Position - origin
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = {LocalPlayer.Character, targetHead.Parent}
+    local result = workspace:Raycast(origin, direction, params)
+    return result and result.Instance and not result.Instance:IsDescendantOf(targetHead.Parent)
+end
+
+-- Render FOV + Tracer
+RunService.RenderStepped:Connect(function()
+    fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    fovCircle.Radius = FOVRadiusValue.Value
+    hue = (hue + 0.0005) % 1
+    fovCircle.Color = Color3.fromHSV(hue, 1, 1)
+
+    if not SilentAimEnabledValue.Value then
+        tracerLine.Visible = false
+        return
+    end
+
+    local target = GetClosestTarget()
+    if target and target.Character and target.Character:FindFirstChild("Head") then
+        local headPos = target.Character:FindFirstChild(TargetPartValue.Value).Position or target.Character.Head.Position
+        local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+        if onScreen then
+            local centerScreen = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+            tracerLine.From = centerScreen
+            tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
+            tracerLine.Color = Color3.fromHSV(hue, 1, 1)
+            tracerLine.Visible = true
+        else
+            tracerLine.Visible = false
+        end
+    else
+        tracerLine.Visible = false
+    end
+end)
+
+-- WindUI Controls
+CombatTab:Toggle({
+    Title = "Silent Aim",
+    Value = SilentAimEnabledValue.Value,
+    Callback = function(state)
+        SilentAimEnabledValue.Value = state
+        fovCircle.Visible = state
+        tracerLine.Visible = state
+    end
+})
+
+CombatTab:Toggle({
+    Title = "Attack Anti Lock",
+    Value = AttackAntiLockEnabledValue.Value,
+    Callback = function(state)
+        AttackAntiLockEnabledValue.Value = state
+    end
+})
+
+
+CombatTab:Slider({
+    Title = "FOV :",
+    Step = 5,
+    Value = {Min = 10, Max = 1000, Default = FOVRadiusValue.Value},
+    Callback = function(value)
+        FOVRadiusValue.Value = value
+    end
+})
+
+CombatTab:Slider({
+    Title = "Lock Distance :",
+    Step = 25,
+    Value = {Min = 50, Max = 1000, Default = LockDistanceValue.Value},
+    Callback = function(value)
+        LockDistanceValue.Value = value
+    end
+})
+
+CombatTab:Dropdown({
+    Title = "Target Part",
+    Values = {"Head","HumanoidRootPart"},
+    Value = TargetPartValue.Value,
+    Callback = function(option)
+        TargetPartValue.Value = option
+    end
+})
+
+CombatTab:Toggle({
+    Title = "Magic Bullet",
+    Value = MagicBulletValue.Value,
+    Callback = function(state)
+        MagicBulletValue.Value = state
+    end
+})
+
+CombatTab:Input({
+    Title = "Safe Players",
+    Placeholder = "ใส่ชื่อเพื่อนที่ไม่ล็อค, คั่นด้วย ,",
+    InputIcon = "shield-check",
+    Callback = function(txt)
+        IgnorePlayers = {}
+        for inputName in string.gmatch(txt, '([^,]+)') do
+            inputName = inputName:match("^%s*(.-)%s*$")
+            table.insert(IgnorePlayers, inputName)
+        end
+    end
+})
+
+-- อัพเดท IgnorePlayers ทุก 60 วินาที (ลบคนที่ออกจากเกม)
 task.spawn(function()
     while true do
         task.wait(60)
