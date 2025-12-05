@@ -31,6 +31,7 @@ local CheaterTab = Window:Tab({Title = "CHEATER:", Icon = "user"})
 local EspTab = Window:Tab({Title = "Esp", Icon = "align-start-vertical"})
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
 
+
 local SilentAimEnabledValue = Instance.new("BoolValue")
 SilentAimEnabledValue.Name = "SilentAimEnabled"
 SilentAimEnabledValue.Value = false
@@ -61,14 +62,21 @@ AttackAntiLockEnabledValue.Name = "AttackAntiLockEnabled"
 AttackAntiLockEnabledValue.Value = false
 AttackAntiLockEnabledValue.Parent = LocalPlayer
 
+local AttackAntiKillEnabledValue = Instance.new("BoolValue")
+AttackAntiKillEnabledValue.Name = "AttackAntiKillEnabled"
+AttackAntiKillEnabledValue.Value = false
+AttackAntiKillEnabledValue.Parent = LocalPlayer
+
 local IgnorePlayers = {}
 local CurrentTarget, head, aimPos
 local hue = 0
 
+-- ปืนที่รองรับ
 local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
 local GunLookup = {}
 for _, name in pairs(GunNames) do GunLookup[name] = true end
 
+-- FOV Circle
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1
 fovCircle.NumSides = 100
@@ -77,11 +85,15 @@ fovCircle.Filled = false
 fovCircle.Visible = SilentAimEnabledValue.Value
 fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 
+-- Tracer
 local tracerLine = Drawing.new("Line")
 tracerLine.Thickness = 1
 tracerLine.Visible = false
 
+-- คาดเดา
 local PREDICT = 0.165
+local LastHealth = {}
+
 local function VelocityPrediction(part)
     if not part or not part.Parent then return Vector3.new() end
     local partSize = (part:IsA("BasePart") and part.Size.Y or 1)
@@ -90,31 +102,31 @@ local function VelocityPrediction(part)
     return part.Position + Vector3.new(0, partSize/2, 0) + vel * PREDICT
 end
 
-local PREDICTION_FACTOR = 3
-local LastHealth = {}
 local function AntiLockPrediction(part)
     if not part or not part.Parent then return part.Position end
     local root = part.Parent:FindFirstChild("HumanoidRootPart")
     local humanoid = part.Parent:FindFirstChild("Humanoid")
     if not humanoid then return part.Position end
-    local speed = root and root.Velocity.Magnitude or 0
     local headPos = part.Position + Vector3.new(0, (part:IsA("BasePart") and part.Size.Y or 1)/2, 0)
-
-    local hp = humanoid.Health
-    local lastHp = LastHealth[part.Parent] or hp
-    LastHealth[part.Parent] = hp
-
-    if hp <= 16 then
-        return headPos -- ยิงตรงหัวถ้าเลือดน้อย
+    
+    -- ถ้า Attack Anti Kill เปิด = ยิงตรงหัวทุกตัว
+    if AttackAntiKillEnabledValue.Value then
+        AttackAntiLockEnabledValue.Value = false -- ปิด AntiLock อัตโนมัติ
+        return headPos
     end
 
-    -- ถ้า Anti Lock เปิด
+    -- Health check
+    local hp = humanoid.Health
+    LastHealth[part.Parent] = hp
+
+    -- ถ้า Attack Anti Lock เปิด
     if AttackAntiLockEnabledValue.Value then
+        local speed = root and root.Velocity.Magnitude or 0
         local forward = part.CFrame.LookVector
         local factor = 0
         if speed < 14 then
             factor = 0
-        elseif speed >= 14 then
+        else
             factor = 6
         end
         return headPos + forward * factor
@@ -123,7 +135,7 @@ local function AntiLockPrediction(part)
     end
 end
 
--- ตรวจ IgnorePlayers
+-- ฟังก์ชัน Ignore
 local function IsIgnored(plr)
     for _, name in ipairs(IgnorePlayers) do
         if string.lower(plr.Name) == string.lower(name) then
@@ -133,7 +145,7 @@ local function IsIgnored(plr)
     return false
 end
 
--- หาเป้าหมายใกล้ FOV และไม่เกินระยะล็อค
+-- หาเป้าหมายใกล้ FOV
 local function GetClosestTarget()
     local closest
     local shortest = math.huge
@@ -158,7 +170,7 @@ local function GetClosestTarget()
     return closest
 end
 
--- เช็คว่าถือปืนได้
+-- เช็คว่าถือปืน
 local function IsHoldingAllowedGun(args)
     local ok, weapon = pcall(function() return args[3] end)
     if ok and typeof(weapon) == "Instance" and GunLookup[weapon.Name] then return true end
@@ -168,6 +180,18 @@ local function IsHoldingAllowedGun(args)
         end
     end
     return false
+end
+
+-- ตรวจกำแพง
+local function IsBehindWall(targetHead)
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return false end
+    local origin = LocalPlayer.Character.Head.Position
+    local direction = targetHead.Position - origin
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = {LocalPlayer.Character, targetHead.Parent}
+    local result = workspace:Raycast(origin, direction, params)
+    return result and result.Instance and not result.Instance:IsDescendantOf(targetHead.Parent)
 end
 
 -- Hook ยิง
@@ -190,7 +214,7 @@ oldFire = hookfunction(send.FireServer, function(self, ...)
 
             args[5] = {[1] = {[1] = {["Instance"] = head, ["Position"] = aimPos}}}
 
-            -- Beam สีรุ้ง
+            -- Beam
             local ourHead = LocalPlayer.Character.Head
             local distance = (aimPos - ourHead.Position).Magnitude
             local beam = Instance.new("Part", workspace)
@@ -205,18 +229,6 @@ oldFire = hookfunction(send.FireServer, function(self, ...)
     end
     return oldFire(self, unpack(args))
 end)
-
--- ตรวจกำแพง
-function IsBehindWall(targetHead)
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return false end
-    local origin = LocalPlayer.Character.Head.Position
-    local direction = targetHead.Position - origin
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Blacklist
-    params.FilterDescendantsInstances = {LocalPlayer.Character, targetHead.Parent}
-    local result = workspace:Raycast(origin, direction, params)
-    return result and result.Instance and not result.Instance:IsDescendantOf(targetHead.Parent)
-end
 
 -- Render FOV + Tracer
 RunService.RenderStepped:Connect(function()
@@ -248,7 +260,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- WindUI Controls
+-- UI Controls
 CombatTab:Toggle({
     Title = "Silent Aim",
     Value = SilentAimEnabledValue.Value,
@@ -264,43 +276,44 @@ CombatTab:Toggle({
     Value = AttackAntiLockEnabledValue.Value,
     Callback = function(state)
         AttackAntiLockEnabledValue.Value = state
+        if state then AttackAntiKillEnabledValue.Value = false end
     end
 })
 
+CombatTab:Toggle({
+    Title = "Attack Anti Kill",
+    Value = AttackAntiKillEnabledValue.Value,
+    Callback = function(state)
+        AttackAntiKillEnabledValue.Value = state
+        if state then AttackAntiLockEnabledValue.Value = false end
+    end
+})
 
 CombatTab:Slider({
     Title = "FOV :",
     Step = 5,
     Value = {Min = 10, Max = 1000, Default = FOVRadiusValue.Value},
-    Callback = function(value)
-        FOVRadiusValue.Value = value
-    end
+    Callback = function(value) FOVRadiusValue.Value = value end
 })
 
 CombatTab:Slider({
     Title = "Lock Distance :",
     Step = 25,
     Value = {Min = 50, Max = 1000, Default = LockDistanceValue.Value},
-    Callback = function(value)
-        LockDistanceValue.Value = value
-    end
+    Callback = function(value) LockDistanceValue.Value = value end
 })
 
 CombatTab:Dropdown({
     Title = "Target Part",
     Values = {"Head","HumanoidRootPart"},
     Value = TargetPartValue.Value,
-    Callback = function(option)
-        TargetPartValue.Value = option
-    end
+    Callback = function(option) TargetPartValue.Value = option end
 })
 
 CombatTab:Toggle({
     Title = "Magic Bullet",
     Value = MagicBulletValue.Value,
-    Callback = function(state)
-        MagicBulletValue.Value = state
-    end
+    Callback = function(state) MagicBulletValue.Value = state end
 })
 
 CombatTab:Input({
@@ -316,7 +329,6 @@ CombatTab:Input({
     end
 })
 
--- อัพเดท IgnorePlayers ทุก 60 วินาที (ลบคนที่ออกจากเกม)
 task.spawn(function()
     while true do
         task.wait(60)
