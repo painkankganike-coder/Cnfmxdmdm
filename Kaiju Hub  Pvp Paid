@@ -19,7 +19,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:Tag({
-    Title = "v 0.0.2 t",
+    Title = "v 0.2.8 t",
     Icon = "cloud",
     Color = Color3.fromHex("#2889F7"),
     Radius = 13,
@@ -127,7 +127,7 @@ local function AntiLockPrediction(part)
         if speed < 14 then
             factor = 0
         else
-            factor = 6
+            factor = 5
         end
         return headPos + forward * factor
     else
@@ -1244,6 +1244,13 @@ EspTab:Toggle({
     end
 })
 
+-- อัปเดต CurrentTarget ตาม tracerLine ทุก frame
+RunService.RenderStepped:Connect(function()
+    -- ใช้ target ของ tracerLine / Silent Aim
+    local target = GetClosestTarget() -- จากโค้ดล็อคเดิมของคุณ
+    CurrentTarget = target
+end)
+
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -1656,8 +1663,6 @@ EspTab:Toggle({
     end
 })
 
-
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1665,7 +1670,6 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local ItemESP_Enabled = false
-
 local BillboardCache = {}
 local ItemESP_UpdateConnections = {}
 local WeaponDB = {}
@@ -1680,9 +1684,9 @@ local RARITY_COLORS = {
     ["Omega"] = Color3.fromRGB(255, 120, 120),
 }
 
+-- ฟังก์ชันสร้าง key ของ Tool
 local function generateUniqueKey(tool)
     if not tool or not tool:IsA("Tool") then return nil end
-
     local itemId = tool:GetAttribute("ItemId") or tool:GetAttribute("Id") or tool:GetAttribute("WeaponId") or tool:GetAttribute("GunId")
     if itemId and itemId ~= "" then
         return "ITEMID_" .. tostring(itemId)
@@ -1711,6 +1715,7 @@ local function generateUniqueKey(tool)
     return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
 end
 
+-- ลงทะเบียน Tool ทั้งหมด
 local function registerItems(folder)
     for _, tool in ipairs(folder:GetDescendants()) do
         if not tool:IsA("Tool") then continue end
@@ -1757,6 +1762,7 @@ local function getWeaponInfo(tool)
     return WeaponDB[key]
 end
 
+-- สร้าง Billboard สำหรับผู้เล่น
 local function createBillboardForPlayer(player)
     if player == LocalPlayer then return end
 
@@ -1780,8 +1786,8 @@ local function createBillboardForPlayer(player)
         local backpack = player:FindFirstChild("Backpack")
         if backpack then scan(backpack) end
 
+        -- ถ้า Billboard หายหรือยังไม่มี สร้างใหม่
         if not BillboardCache[player] or not BillboardCache[player].Parent then
-            -- สร้าง Billboard ใหม่
             local hrp = player.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
@@ -1801,6 +1807,7 @@ local function createBillboardForPlayer(player)
             BillboardCache[player] = billboard
         end
 
+        -- อัปเดต Tool ภายใน Billboard
         local container = BillboardCache[player]:FindFirstChildOfClass("Frame")
         if container then
             container:ClearAllChildren()
@@ -1826,6 +1833,7 @@ local function createBillboardForPlayer(player)
         end
     end
 
+    -- อัปเดตทันทีทุก 1 วินาที
     task.spawn(function()
         while ItemESP_Enabled and player.Parent do
             pcall(updateESP)
@@ -1833,21 +1841,19 @@ local function createBillboardForPlayer(player)
         end
     end)
 
+    -- เก็บ connection
     ItemESP_UpdateConnections[player] = {}
     if player.Character then
         table.insert(ItemESP_UpdateConnections[player], player.Character.ChildAdded:Connect(function()
-            if ItemESP_Enabled then
-                task.defer(updateESP)
-            end
+            if ItemESP_Enabled then task.defer(updateESP) end
         end))
         table.insert(ItemESP_UpdateConnections[player], player.Character.ChildRemoved:Connect(function()
-            if ItemESP_Enabled then
-                task.defer(updateESP)
-            end
+            if ItemESP_Enabled then task.defer(updateESP) end
         end))
     end
 end
 
+-- ฟังก์ชันอัปเดตทุกคน (สร้าง Billboard ใหม่ถ้าหาย)
 local function UpdateAllItemESP()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
@@ -1859,6 +1865,7 @@ local function UpdateAllItemESP()
     end
 end
 
+-- Loop อัปเดตทุก 1 วินาที
 task.spawn(function()
     while true do
         task.wait(1)
@@ -1866,6 +1873,23 @@ task.spawn(function()
     end
 end)
 
+-- Loop สร้าง/รีเฟรช Billboard ใหม่ทุก 20 วินาที
+task.spawn(function()
+    while true do
+        task.wait(20)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and ItemESP_Enabled then
+                if BillboardCache[player] and BillboardCache[player].Parent then
+                    BillboardCache[player]:Destroy()
+                    BillboardCache[player] = nil
+                end
+                createBillboardForPlayer(player)
+            end
+        end
+    end
+end)
+
+-- Player Added/Removed
 Players.PlayerAdded:Connect(function(p)
     if p ~= LocalPlayer and ItemESP_Enabled then
         task.wait(0.1)
@@ -1887,7 +1911,6 @@ end)
 
 EspTab:Toggle({
     Title = "Item",
-    Icon = "circle-check",
     Value = ItemESP_Enabled,
     Callback = function(state)
         ItemESP_Enabled = state
