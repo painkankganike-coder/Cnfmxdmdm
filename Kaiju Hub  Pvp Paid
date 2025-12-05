@@ -1074,7 +1074,7 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
 end)
 
-        if lines[1].Color ~= targetColor then
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -1087,7 +1087,7 @@ local BOX_COLOR_LOCKED = Color3.fromRGB(255, 0, 0)
 local BOX_THICKNESS = 2
 local SCALE_MULTIPLIER = 1
 
--- Table เก็บ ESP แต่ละคน
+
 local espPlayers = {}
 
 -- ตัวแปร CurrentTarget (ตาม tracerLine)
