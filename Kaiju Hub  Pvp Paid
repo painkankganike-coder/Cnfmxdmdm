@@ -6,7 +6,6 @@ local Players, RunService, Camera, LocalPlayer, ReplicatedStorage =
     game.Players.LocalPlayer,
     game:GetService("ReplicatedStorage")
 
-
 local Window = WindUI:CreateWindow({
     Title = "Kaiju Hub | Pvp Paid 💵",
     Icon = "gitlab",
@@ -19,7 +18,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:Tag({
-    Title = "v 0.2.8 t",
+    Title = "v 0.3.2 t",
     Icon = "cloud",
     Color = Color3.fromHex("#2889F7"),
     Radius = 13,
@@ -300,6 +299,7 @@ CombatTab:Input({
         end
     end
 })
+
 task.spawn(function()
     while true do
         task.wait(60)
