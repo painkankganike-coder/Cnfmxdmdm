@@ -1,4 +1,4 @@
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+ocal WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 local Players, RunService, Camera, LocalPlayer, ReplicatedStorage =
     game:GetService("Players"),
     game:GetService("RunService"),
@@ -31,7 +31,6 @@ local CheaterTab = Window:Tab({Title = "CHEATER:", Icon = "user"})
 local EspTab = Window:Tab({Title = "Esp", Icon = "align-start-vertical"})
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
 
-
 local SilentAimEnabledValue = Instance.new("BoolValue")
 SilentAimEnabledValue.Name = "SilentAimEnabled"
 SilentAimEnabledValue.Value = false
@@ -61,11 +60,6 @@ local AttackAntiLockEnabledValue = Instance.new("BoolValue")
 AttackAntiLockEnabledValue.Name = "AttackAntiLockEnabled"
 AttackAntiLockEnabledValue.Value = false
 AttackAntiLockEnabledValue.Parent = LocalPlayer
-
-local AttackAntiKillEnabledValue = Instance.new("BoolValue")
-AttackAntiKillEnabledValue.Name = "AttackAntiKillEnabled"
-AttackAntiKillEnabledValue.Value = false
-AttackAntiKillEnabledValue.Parent = LocalPlayer
 
 local IgnorePlayers = {}
 local CurrentTarget, head, aimPos
@@ -102,33 +96,19 @@ local function VelocityPrediction(part)
     return part.Position + Vector3.new(0, partSize/2, 0) + vel * PREDICT
 end
 
+-- แก้ไข AntiLockPrediction ตามความเร็ว
 local function AntiLockPrediction(part)
     if not part or not part.Parent then return part.Position end
     local root = part.Parent:FindFirstChild("HumanoidRootPart")
     local humanoid = part.Parent:FindFirstChild("Humanoid")
     if not humanoid then return part.Position end
+
     local headPos = part.Position + Vector3.new(0, (part:IsA("BasePart") and part.Size.Y or 1)/2, 0)
-    
-    -- ถ้า Attack Anti Kill เปิด = ยิงตรงหัวทุกตัว
-    if AttackAntiKillEnabledValue.Value then
-        AttackAntiLockEnabledValue.Value = false -- ปิด AntiLock อัตโนมัติ
-        return headPos
-    end
 
-    -- Health check
-    local hp = humanoid.Health
-    LastHealth[part.Parent] = hp
-
-    -- ถ้า Attack Anti Lock เปิด
     if AttackAntiLockEnabledValue.Value then
         local speed = root and root.Velocity.Magnitude or 0
         local forward = part.CFrame.LookVector
-        local factor = 0
-        if speed < 14 then
-            factor = 0
-        else
-            factor = 5
-        end
+        local factor = (speed >= 14) and 5 or 0 -- คาดเดาเมื่อเร็ว >= 14
         return headPos + forward * factor
     else
         return VelocityPrediction(part)
@@ -243,6 +223,8 @@ RunService.RenderStepped:Connect(function()
     end
 
     local target = GetClosestTarget()
+    CurrentTarget = target -- อัปเดตทุกเฟรมตาม tracerLine
+
     if target and target.Character and target.Character:FindFirstChild("Head") then
         local headPos = target.Character:FindFirstChild(TargetPartValue.Value).Position or target.Character.Head.Position
         local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
@@ -276,16 +258,6 @@ CombatTab:Toggle({
     Value = AttackAntiLockEnabledValue.Value,
     Callback = function(state)
         AttackAntiLockEnabledValue.Value = state
-        if state then AttackAntiKillEnabledValue.Value = false end
-    end
-})
-
-CombatTab:Toggle({
-    Title = "Attack Anti Kill",
-    Value = AttackAntiKillEnabledValue.Value,
-    Callback = function(state)
-        AttackAntiKillEnabledValue.Value = state
-        if state then AttackAntiLockEnabledValue.Value = false end
     end
 })
 
@@ -328,7 +300,6 @@ CombatTab:Input({
         end
     end
 })
-
 task.spawn(function()
     while true do
         task.wait(60)
