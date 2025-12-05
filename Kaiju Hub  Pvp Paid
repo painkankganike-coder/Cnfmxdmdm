@@ -1091,129 +1091,173 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
 end)
 
-local Players = game:GetService("Players")  
-local RunService = game:GetService("RunService")  
-local Workspace = game:GetService("Workspace")  
-local LocalPlayer = Players.LocalPlayer  
-local camera = Workspace.CurrentCamera  
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
 
-local BOX_COLOR = Color3.fromRGB(255, 255, 255)  
-local BOX_THICKNESS = 2  
-local SCALE_MULTIPLIER = 1  
-  
-local espPlayers = {}  
+-- Config
+local BOX_COLOR = Color3.fromRGB(255, 255, 255)
+local TARGET_COLOR = Color3.fromRGB(255, 0, 0)
+local BOX_THICKNESS = 2
+local SCALE_MULTIPLIER = 1
 
-local CurrentTarget = nil
+-- Table เก็บ ESP แต่ละคน
+local espPlayers = {}
 
-local function worldToViewport(pos)  
-    local screen, onScreen = camera:WorldToViewportPoint(pos)  
-    return Vector2.new(screen.X, screen.Y), onScreen  
-end  
+-- ตัวแปรล็อคเป้า
+local CurrentTarget = nil  -- จะถูกอัปเดตโดยระบบล็อคเป้า (Silent Aim)
 
-local function createBoxESP(plr)  
-    if espPlayers[plr] or plr == LocalPlayer then return end  
+-- แปลงตำแหน่งโลกเป็นหน้าจอ
+local function worldToViewport(pos)
+    local screen, onScreen = camera:WorldToViewportPoint(pos)
+    return Vector2.new(screen.X, screen.Y), onScreen
+end
 
-    local lines = {}  
-    for i = 1, 12 do  
-        local line = Drawing.new("Line")  
-        line.Visible = false  
-        line.Color = BOX_COLOR  
-        line.Thickness = BOX_THICKNESS  
-        line.Transparency = 1  
-        lines[i] = line  
-    end  
+-- สร้าง Box ESP
+local function createBoxESP(plr)
+    if espPlayers[plr] or plr == LocalPlayer then return end
 
-    local connection = RunService.RenderStepped:Connect(function()  
-        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then  
-            for _, line in ipairs(lines) do line.Visible = false end  
-            return  
-        end  
+    local lines = {}
+    for i = 1, 12 do
+        local line = Drawing.new("Line")
+        line.Visible = false
+        line.Color = BOX_COLOR
+        line.Thickness = BOX_THICKNESS
+        line.Transparency = 1
+        lines[i] = line
+    end
 
-        local root = plr.Character.HumanoidRootPart  
-        local rootPos = root.Position  
-        local scale = root.Size.Y * SCALE_MULTIPLIER  
+    local connection = RunService.RenderStepped:Connect(function()
+        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
+            for _, line in ipairs(lines) do line.Visible = false end
+            return
+        end
 
-        local corners = {  
-            Vector3.new(-1,  2, -1), Vector3.new( 1,  2, -1), Vector3.new( 1,  2,  1), Vector3.new(-1,  2,  1),  
-            Vector3.new(-1, -2, -1), Vector3.new( 1, -2, -1), Vector3.new( 1, -2,  1), Vector3.new(-1, -2,  1)  
-        }  
+        local root = plr.Character.HumanoidRootPart
+        local rootPos = root.Position
+        local scale = root.Size.Y * SCALE_MULTIPLIER
 
-        local screenCorners = {}  
-        local allOnScreen = true  
+        local corners = {
+            Vector3.new(-1,  2, -1), Vector3.new( 1,  2, -1), Vector3.new( 1,  2,  1), Vector3.new(-1,  2,  1),
+            Vector3.new(-1, -2, -1), Vector3.new( 1, -2, -1), Vector3.new( 1, -2,  1), Vector3.new(-1, -2,  1)
+        }
 
-        for i, offset in ipairs(corners) do  
-            local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))  
-            local screenPos, onScreen = worldToViewport(worldPos)  
-            screenCorners[i] = screenPos  
-            if not onScreen then allOnScreen = false end  
-        end  
+        local screenCorners = {}
+        local allOnScreen = true
 
-        if not allOnScreen then  
-            for _, line in ipairs(lines) do line.Visible = false end  
-            return  
-        end  
+        for i, offset in ipairs(corners) do
+            local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
+            local screenPos, onScreen = worldToViewport(worldPos)
+            screenCorners[i] = screenPos
+            if not onScreen then allOnScreen = false end
+        end
 
-        local color = (CurrentTarget == plr) and Color3.fromRGB(255,0,0) or BOX_COLOR  
+        if not allOnScreen then
+            for _, line in ipairs(lines) do line.Visible = false end
+            return
+        end
 
-        local edges = {  
-            {1,2},{2,3},{3,4},{4,1},  
-            {5,6},{6,7},{7,8},{8,5},  
-            {1,5},{2,6},{3,7},{4,8}  
-        }  
+        -- อัปเดตสีอัตโนมัติ: ถ้าเป็นเป้าล็อคปัจจุบัน -> แดง
+        local color = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
 
-        for i, edge in ipairs(edges) do  
-            local line = lines[i]  
-            line.From = screenCorners[edge[1]]  
-            line.To = screenCorners[edge[2]]  
-            line.Color = color  -- อัพเดตสี  
-            line.Visible = true  
-        end  
-    end)  
+        local edges = {
+            {1,2},{2,3},{3,4},{4,1},
+            {5,6},{6,7},{7,8},{8,5},
+            {1,5},{2,6},{3,7},{4,8}
+        }
 
-    espPlayers[plr] = {connection = connection, lines = lines}  
-end  
- 
-local function removeBoxESP(plr)  
-    if espPlayers[plr] then  
-        if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end  
-        for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end  
-        espPlayers[plr] = nil  
-    end  
-end  
+        for i, edge in ipairs(edges) do
+            local line = lines[i]
+            line.From = screenCorners[edge[1]]
+            line.To = screenCorners[edge[2]]
+            line.Color = color
+            line.Visible = true
+        end
+    end)
 
-local function enableAllESP()  
-    for _, plr in pairs(Players:GetPlayers()) do  
-        if plr ~= LocalPlayer then createBoxESP(plr) end  
-    end  
-end  
-  
-local function disableAllESP()  
-    for plr, _ in pairs(espPlayers) do  
-        removeBoxESP(plr)  
-    end  
-end  
+    espPlayers[plr] = {connection = connection, lines = lines}
+end
 
-Players.PlayerAdded:Connect(function(plr)  
-    task.wait(1)  
-    if _G.ESPEnabled then createBoxESP(plr) end  
-end)  
-Players.PlayerRemoving:Connect(removeBoxESP)  
+-- ลบ Box ESP
+local function removeBoxESP(plr)
+    if espPlayers[plr] then
+        if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end
+        for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end
+        espPlayers[plr] = nil
+    end
+end
 
-EspTab:Toggle({  
-    Title = "Box",  
-    Icon = "eye",  
-    Default = false,  
-    Callback = function(state)  
-        _G.ESPEnabled = state  
-        if state then  
-            enableAllESP()  
-            print("✅ ESP Box: ON")  
-        else  
-            disableAllESP()  
-            print("❌ ESP Box: OFF")  
-        end  
-    end  
+-- สร้าง ESP ทั้งหมด
+local function enableAllESP()
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then createBoxESP(plr) end
+    end
+end
+
+-- ลบ ESP ทั้งหมด
+local function disableAllESP()
+    for plr, _ in pairs(espPlayers) do
+        removeBoxESP(plr)
+    end
+end
+
+-- Player Added/Removing
+Players.PlayerAdded:Connect(function(plr)
+    task.wait(1)
+    if _G.ESPEnabled then createBoxESP(plr) end
+end)
+Players.PlayerRemoving:Connect(removeBoxESP)
+
+-- WindUi Toggle
+EspTab:Toggle({
+    Title = "Box",
+    Default = false,
+    Callback = function(state)
+        _G.ESPEnabled = state
+        if state then
+            enableAllESP()
+            print("✅ ESP Box: ON")
+        else
+            disableAllESP()
+            print("❌ ESP Box: OFF")
+        end
+    end
 })
+
+RunService.RenderStepped:Connect(function()
+    if not _G.SilentAimEnabled then
+        CurrentTarget = nil
+        return
+    end
+
+    local closest
+    local shortest = math.huge
+    local center = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
+            local headPart = plr.Character:FindFirstChild("Head")
+            local humanoid = plr.Character:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health <= 0 then continue end
+
+            local distance = (headPart.Position - LocalPlayer.Character.Head.Position).Magnitude
+            if distance > _G.LockDistance then continue end
+
+            local screenPos, onScreen = camera:WorldToViewportPoint(headPart.Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                if dist < _G.FOVRadius and dist < shortest then
+                    shortest = dist
+                    closest = plr
+                end
+            end
+        end
+    end
+
+    CurrentTarget = closest
+end)
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
