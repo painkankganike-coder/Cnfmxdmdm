@@ -1103,6 +1103,7 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
 end)
 
+        if lines[1].Color ~= targetColor then
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -1148,6 +1149,12 @@ local function createBoxESP(plr)
     local lines = createLines(BOX_COLOR_DEFAULT)
     local connection
     connection = RunService.RenderStepped:Connect(function()
+        if not _G.ESPEnabled then
+            for _, line in ipairs(lines) do line.Visible = false end
+            return
+        end
+
+        -- ตรวจสอบ Character/HumanoidRootPart
         if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
             for _, line in ipairs(lines) do line.Visible = false end
             return
@@ -1170,26 +1177,27 @@ local function createBoxESP(plr)
             screenCorners[i] = screenPos
             if not onScreen then allOnScreen = false end
         end
+
+        -- ถ้าไม่อยู่บนหน้าจอ → ซ่อนเส้น
         if not allOnScreen then
             for _, line in ipairs(lines) do line.Visible = false end
             return
         end
 
-        -- กำหนดสีตาม CurrentTarget
+        -- อัปเดตสีตาม CurrentTarget
         local targetColor = (CurrentTarget == plr) and BOX_COLOR_LOCKED or BOX_COLOR_DEFAULT
-
-        -- ถ้าสีเปลี่ยน = ลบเส้นเก่าแล้วสร้างใหม่
         if lines[1].Color ~= targetColor then
             for _, line in ipairs(lines) do line:Remove() end
             lines = createLines(targetColor)
+            espPlayers[plr].lines = lines
         end
 
+        -- อัปเดตตำแหน่งเส้น
         local edges = {
             {1,2},{2,3},{3,4},{4,1},
             {5,6},{6,7},{7,8},{8,5},
             {1,5},{2,6},{3,7},{4,8}
         }
-
         for i, edge in ipairs(edges) do
             local line = lines[i]
             line.From = screenCorners[edge[1]]
@@ -1244,7 +1252,7 @@ EspTab:Toggle({
     end
 })
 
--- อัปเดต CurrentTarget ตาม tracerLine ทุก frame
+-- อัปเดต CurrentTarget ตาม tracerLine ทุก frame และซิงค์ ESP แบบ realtime
 RunService.RenderStepped:Connect(function()
     -- ใช้ target ของ tracerLine / Silent Aim
     local target = GetClosestTarget() -- จากโค้ดล็อคเดิมของคุณ
