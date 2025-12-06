@@ -17,30 +17,6 @@ local Window = WindUI:CreateWindow({
     Resizable = true,
 })
 
-    -- !  ↓  if you DON'T need the key system
-    KeySystem = { 
-        -- ↓ Optional. You can remove it.
-        Key = { "Free_KeyKaijuHubGoonManGay", "Free_KeyMyKaijuHubXDHee" },
-        
-        Note = "Key My discord Kaiju Hub.",
-        
-        -- ↓ Optional. You can remove it.
-        Thumbnail = {
-            Image = "rbxassetid://107970969112343",
-            Title = "Thumbnail",
-        },
-        
-        -- ↓ Optional. You can remove it.
-        URL = "https://discord.gg/j7tzEVZP67",
-        
-        -- ↓ Optional. You can remove it.
-        SaveKey = false, -- automatically save and load the key.
-        
-        -- ↓ Optional. You can remove it.
-        -- API = {} ← Services. Read about it below ↓
-    },
-})
-
 Window:Tag({
     Title = "v 0.2.9 t",
     Icon = "cloud",
