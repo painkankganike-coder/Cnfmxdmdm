@@ -346,13 +346,13 @@ local LocalPlayer = Players.LocalPlayer
 
 local FireRateValue = Instance.new("NumberValue")
 FireRateValue.Name = "FireRateValue"
-FireRateValue.Value = 1500
+FireRateValue.Value = 1200
 FireRateValue.Parent = LocalPlayer
 
 WeaponTab:Slider({
     Title = "Fire Rate",
     Step = 1,
-    Value = {Min = 1, Max = 3000, Default = FireRateValue.Value},
+    Value = {Min = 1, Max = 1200, Default = FireRateValue.Value},
     Callback = function(value)
         FireRateValue.Value = value
     end
