@@ -319,7 +319,7 @@ FireRateValue.Parent = LocalPlayer
 WeaponTab:Slider({
     Title = "Fire Rate",
     Step = 100,
-    Value = {Min = 1, Max = 1200, Default = FireRateValue.Value},
+    Value = {Min = 1, Max = 2000, Default = FireRateValue.Value},
     Callback = function(value)
         FireRateValue.Value = value
     end
