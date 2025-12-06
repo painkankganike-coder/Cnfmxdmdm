@@ -29,6 +29,7 @@ local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "blocks"})
 local CheaterTab = Window:Tab({Title = "CHEATER:", Icon = "user"})
 local EspTab = Window:Tab({Title = "Esp", Icon = "align-start-vertical"})
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
+local OtherTab = Window:Tab({Title = "OTHER:", Icon = "airplay"})
 
 local SilentAimEnabledValue = Instance.new("BoolValue")
 SilentAimEnabledValue.Name = "SilentAimEnabled"
@@ -2475,3 +2476,190 @@ ServerTab:Button({
         print("✅ DoorSystem & all doors removed!")
     end
 })
+
+OtherTab:Keybind({
+    Title = "Keybind",
+    Desc = "เซตคีย์บอร์ดเพื่อเปิด ui",
+    Value = "G",
+    Callback = function(v)
+        Window:SetToggleKey(Enum.KeyCode[v])
+    end
+})
+
+OtherTab:Section({Title="Misc  :"})
+
+
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+
+-- หา CounterTable จาก getgc
+local CounterTable
+pcall(function()
+    for _, Obj in ipairs(getgc(true)) do
+        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
+            CounterTable = Obj
+            break
+        end
+    end
+end)
+
+-- Net.get Function
+local Net = {}
+local function NetGet(...)
+    if not CounterTable or not CounterTable.func then
+        warn("❌ CounterTable ไม่พบ!")
+        return
+    end
+    local args = {...}
+    CounterTable.func = (CounterTable.func or 0) + 1
+    local success, result = pcall(function()
+        local GetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Get")
+        return GetRemote:InvokeServer(CounterTable.func, unpack(args))
+    end)
+    if not success then
+        warn("[NetGet Error]", result)
+    end
+    return result
+end
+function Net.get(...)
+    return NetGet(...)
+end
+
+-- Claim All Function
+local function ClaimAllQuests()
+    local success, questFrame = pcall(function()
+        return player:WaitForChild("PlayerGui"):WaitForChild("Quests"):WaitForChild("QuestsHolder"):WaitForChild("QuestsScrollingFrame")
+    end)
+    if not success or not questFrame then
+        warn("❌ Quest GUI ไม่พบ! (ยังไม่เปิด Quests)")
+        return 0
+    end
+    
+    local claimed = 0
+    for _, child in ipairs(questFrame:GetChildren()) do
+        if (child:IsA("Frame") or child:IsA("TextButton") or child:IsA("ImageButton")) and child.Name ~= "" then
+            pcall(function()
+                Net.get("claim_quest", child.Name)
+            end)
+            claimed = claimed + 1
+            task.wait(0.2)
+        end
+    end
+    return claimed
+end
+
+OtherTab:Button({
+    Title = "Claim All Quests",
+    Locked = false,
+    Callback = function()
+        local claimed = ClaimAllQuests()  -- เรียกฟังก์ชัน ClaimAllQuests
+        if claimed > 0 then
+            print("✅ Claimed", claimed, "Quests!")
+        else
+            print("ℹ️ ไม่มี Quest ให้ Claim")
+        end
+    end
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- สร้าง ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PingDisplay"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+-- สร้าง TextLabel
+local pingLabel = Instance.new("TextLabel")
+pingLabel.Size = UDim2.new(0, 150, 0, 30)
+pingLabel.Position = UDim2.new(0, 10, 0, 10) -- มุมซ้ายบน
+pingLabel.BackgroundTransparency = 1 -- ไม่มีพื้นหลัง
+pingLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- สีแดง
+pingLabel.Font = Enum.Font.SourceSansBold
+pingLabel.TextSize = 18
+pingLabel.Text = "ping : 0 ms"
+pingLabel.Visible = false -- เริ่มแรกปิดไว้
+pingLabel.Parent = screenGui
+
+-- ฟังก์ชันเช็ค ping
+local function getPing()
+    local ok, ping = pcall(function()
+        return LocalPlayer:GetNetworkPing() * 1000 -- แปลงเป็น ms
+    end)
+    if ok and ping then
+        return math.floor(ping)
+    end
+    return 0
+end
+
+-- อัปเดตทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if pingLabel.Visible then
+        pingLabel.Text = "ping : "..getPing().." ms"
+    end
+end)
+
+OtherTab:Toggle({
+    Title = "Show Ping",
+    Value = false,
+    Callback = function(state)
+        pingLabel.Visible = state
+    end
+})
+
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FPSDisplay"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+-- TextLabel สำหรับ FPS
+local fpsLabel = Instance.new("TextLabel")
+fpsLabel.Size = UDim2.new(0, 100, 0, 25)
+fpsLabel.Position = UDim2.new(0, 10, 0, 40) -- ข้างล่างปิงเล็กน้อย
+fpsLabel.BackgroundTransparency = 1
+fpsLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+fpsLabel.Font = Enum.Font.SourceSansBold
+fpsLabel.TextSize = 18
+fpsLabel.Text = "FPS: 0"
+fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
+fpsLabel.TextYAlignment = Enum.TextYAlignment.Top
+fpsLabel.Parent = screenGui
+
+
+local ShowFPS = false
+OtherTab:Toggle({
+    Title = "Show FPS",
+    Value = ShowFPS,
+    Callback = function(state)
+        ShowFPS = state
+        fpsLabel.Visible = state
+    end
+})
+
+-- อัปเดต FPS ทุกเฟรม
+local lastTime = tick()
+local frameCount = 0
+
+RunService.RenderStepped:Connect(function()
+    if ShowFPS then
+        frameCount = frameCount + 1
+        local currentTime = tick()
+        if currentTime - lastTime >= 1 then
+            fpsLabel.Text = "FPS: " .. tostring(frameCount)
+            frameCount = 0
+            lastTime = currentTime
+        end
+    end
+end)
