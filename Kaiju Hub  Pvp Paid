@@ -2391,3 +2391,12 @@ ServerTab:Button({
         removeDoors()
     end
 })
+
+ServerTab:Keybind({
+    Title = "Keybind",
+    Desc = "Keybind to open ui",
+    Value = "G",
+    Callback = function(v)
+        Window:SetToggleKey(Enum.KeyCode[v])
+    end
+})
