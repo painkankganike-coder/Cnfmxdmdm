@@ -18,7 +18,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:Tag({
-    Title = "v 0.3.2 t",
+    Title = "v 0.3.6 t",
     Icon = "cloud",
     Color = Color3.fromHex("#2889F7"),
     Radius = 13,
@@ -308,50 +308,17 @@ end)
 
 CombatTab:Divider()
 
-local ReloadMultiplierValue = Instance.new("NumberValue")
-ReloadMultiplierValue.Name = "ReloadMultiplier"
-ReloadMultiplierValue.Value = 1.0
-ReloadMultiplierValue.Parent = LocalPlayer
-
-WeaponTab:Slider({
-    Title = "Reload time",
-    Step = 0.5,
-    Value = {Min = 0.0, Max = 1.5, Default = ReloadMultiplierValue.Value},
-    Callback = function(value)
-        ReloadMultiplierValue.Value = value
-    end
-})
-
-task.spawn(function()
-    while true do
-        for _, v in pairs(getgc(true)) do
-            if typeof(v) == "table" and rawget(v, "states") then
-                local s = v.states
-
-                -- Reload Speed
-                if s.reload_time and s.reload_time.set then
-                    local original = s.reload_time:get()
-                    if original > 0 then
-                        s.reload_time:set(original / ReloadMultiplierValue.Value)
-                    end
-                end
-            end
-        end
-        task.wait(0.3)
-    end
-end)
-
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local FireRateValue = Instance.new("NumberValue")
 FireRateValue.Name = "FireRateValue"
-FireRateValue.Value = 1200
+FireRateValue.Value = 1000
 FireRateValue.Parent = LocalPlayer
 
 WeaponTab:Slider({
     Title = "Fire Rate",
-    Step = 1,
+    Step = 100,
     Value = {Min = 1, Max = 1200, Default = FireRateValue.Value},
     Callback = function(value)
         FireRateValue.Value = value
