@@ -327,7 +327,6 @@ ReloadMultiplierValue.Name = "ReloadMultiplier"
 ReloadMultiplierValue.Value = 1.0
 ReloadMultiplierValue.Parent = LocalPlayer
 
--- GUI Slider
 WeaponTab:Slider({
     Title = "Reload time",
     Step = 0.5,
@@ -337,7 +336,6 @@ WeaponTab:Slider({
     end
 })
 
--- Task อัปเดต Reload Speed ทุกเฟรม
 task.spawn(function()
     while true do
         for _, v in pairs(getgc(true)) do
@@ -401,7 +399,6 @@ WeaponTab:Toggle({
     end
 })
 
--- Task อัปเดต Automatic ทุกเฟรม
 task.spawn(function()
     while true do
         if AutoEnabled then
@@ -610,8 +607,6 @@ end
          ToggleHitAura(state)
      end
  })
-
-
 
 local SpeedEnabled = false
 local speedMultiplier = 0.10
