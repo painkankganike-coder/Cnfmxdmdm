@@ -321,6 +321,103 @@ end)
 
 CombatTab:Divider()
 
+local ReloadMultiplierValue = Instance.new("NumberValue")
+ReloadMultiplierValue.Name = "ReloadMultiplier"
+ReloadMultiplierValue.Value = 1.0
+ReloadMultiplierValue.Parent = LocalPlayer
+
+-- GUI Slider
+WeaponTab:Slider({
+    Title = "Reload time",
+    Step = 0.5,
+    Value = {Min = 0.0, Max = 1.5, Default = ReloadMultiplierValue.Value},
+    Callback = function(value)
+        ReloadMultiplierValue.Value = value
+    end
+})
+
+-- Task อัปเดต Reload Speed ทุกเฟรม
+task.spawn(function()
+    while true do
+        for _, v in pairs(getgc(true)) do
+            if typeof(v) == "table" and rawget(v, "states") then
+                local s = v.states
+
+                -- Reload Speed
+                if s.reload_time and s.reload_time.set then
+                    local original = s.reload_time:get()
+                    if original > 0 then
+                        s.reload_time:set(original / ReloadMultiplierValue.Value)
+                    end
+                end
+            end
+        end
+        task.wait(0.3)
+    end
+end)
+
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local FireRateValue = Instance.new("NumberValue")
+FireRateValue.Name = "FireRateValue"
+FireRateValue.Value = 1500
+FireRateValue.Parent = LocalPlayer
+
+
+WeaponTab:Slider({
+    Title = "Fire Rate",
+    Step = 1,
+    Value = {Min = 1, Max = 3000, Default = FireRateValue.Value},
+    Callback = function(value)
+        FireRateValue.Value = value
+    end
+})
+
+task.spawn(function()
+    while true do
+        local rate = FireRateValue.Value
+        for _, v in pairs(getgc(true)) do
+            if typeof(v) == "table" and rawget(v, "states") then
+                local s = v.states
+                if s.fire_rate and s.fire_rate.set then
+                    s.fire_rate:set(rate) 
+                end
+            end
+        end
+        task.wait(0.03)
+    end
+end)
+
+local AutoEnabled = false
+
+WeaponTab:Toggle({
+    Title = "Automatic",
+    Value = AutoEnabled,
+    Callback = function(state)
+        AutoEnabled = state
+    end
+})
+
+-- Task อัปเดต Automatic ทุกเฟรม
+task.spawn(function()
+    while true do
+        if AutoEnabled then
+            for _, v in pairs(getgc(true)) do
+                if typeof(v) == "table" and rawget(v, "states") then
+                    local s = v.states
+                    if s.automatic and s.automatic.set then
+                        s.automatic:set(true)
+                    end
+                end
+            end
+        end
+        task.wait(0.3)
+    end
+end)
+
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
