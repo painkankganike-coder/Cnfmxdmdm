@@ -29,7 +29,6 @@ local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "blocks"})
 local CheaterTab = Window:Tab({Title = "CHEATER:", Icon = "user"})
 local EspTab = Window:Tab({Title = "Esp", Icon = "align-start-vertical"})
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
-local OtherTab = Window:Tab({Title = "OTHER:", Icon = "airplay"})
 
 local SilentAimEnabledValue = Instance.new("BoolValue")
 SilentAimEnabledValue.Name = "SilentAimEnabled"
@@ -65,12 +64,10 @@ local IgnorePlayers = {}
 local CurrentTarget, head, aimPos
 local hue = 0
 
--- ปืนที่รองรับ
 local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
 local GunLookup = {}
 for _, name in pairs(GunNames) do GunLookup[name] = true end
 
--- FOV Circle
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1
 fovCircle.NumSides = 100
@@ -79,12 +76,10 @@ fovCircle.Filled = false
 fovCircle.Visible = SilentAimEnabledValue.Value
 fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 
--- Tracer
 local tracerLine = Drawing.new("Line")
 tracerLine.Thickness = 1
 tracerLine.Visible = false
 
--- คาดเดา
 local PREDICT = 0.165
 local LastHealth = {}
 
@@ -96,7 +91,6 @@ local function VelocityPrediction(part)
     return part.Position + Vector3.new(0, partSize/2, 0) + vel * PREDICT
 end
 
--- แก้ไข AntiLockPrediction ตามความเร็ว
 local function AntiLockPrediction(part)
     if not part or not part.Parent then return part.Position end
     local root = part.Parent:FindFirstChild("HumanoidRootPart")
@@ -108,14 +102,13 @@ local function AntiLockPrediction(part)
     if AttackAntiLockEnabledValue.Value then
         local speed = root and root.Velocity.Magnitude or 0
         local forward = part.CFrame.LookVector
-        local factor = (speed >= 14) and 5 or 0 -- คาดเดาเมื่อเร็ว >= 14
+        local factor = (speed >= 14) and 5 or 0  >= 14
         return headPos + forward * factor
     else
         return VelocityPrediction(part)
     end
 end
 
--- ฟังก์ชัน Ignore
 local function IsIgnored(plr)
     for _, name in ipairs(IgnorePlayers) do
         if string.lower(plr.Name) == string.lower(name) then
@@ -125,7 +118,6 @@ local function IsIgnored(plr)
     return false
 end
 
--- หาเป้าหมายใกล้ FOV
 local function GetClosestTarget()
     local closest
     local shortest = math.huge
@@ -150,7 +142,6 @@ local function GetClosestTarget()
     return closest
 end
 
--- เช็คว่าถือปืน
 local function IsHoldingAllowedGun(args)
     local ok, weapon = pcall(function() return args[3] end)
     if ok and typeof(weapon) == "Instance" and GunLookup[weapon.Name] then return true end
@@ -162,7 +153,6 @@ local function IsHoldingAllowedGun(args)
     return false
 end
 
--- ตรวจกำแพง
 local function IsBehindWall(targetHead)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return false end
     local origin = LocalPlayer.Character.Head.Position
@@ -174,7 +164,6 @@ local function IsBehindWall(targetHead)
     return result and result.Instance and not result.Instance:IsDescendantOf(targetHead.Parent)
 end
 
--- Hook ยิง
 local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
 local oldFire
 oldFire = hookfunction(send.FireServer, function(self, ...)
@@ -194,7 +183,6 @@ oldFire = hookfunction(send.FireServer, function(self, ...)
 
             args[5] = {[1] = {[1] = {["Instance"] = head, ["Position"] = aimPos}}}
 
-            -- Beam
             local ourHead = LocalPlayer.Character.Head
             local distance = (aimPos - ourHead.Position).Magnitude
             local beam = Instance.new("Part", workspace)
@@ -210,7 +198,6 @@ oldFire = hookfunction(send.FireServer, function(self, ...)
     return oldFire(self, unpack(args))
 end)
 
--- Render FOV + Tracer
 RunService.RenderStepped:Connect(function()
     fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     fovCircle.Radius = FOVRadiusValue.Value
@@ -223,7 +210,7 @@ RunService.RenderStepped:Connect(function()
     end
 
     local target = GetClosestTarget()
-    CurrentTarget = target -- อัปเดตทุกเฟรมตาม tracerLine
+    CurrentTarget = target
 
     if target and target.Character and target.Character:FindFirstChild("Head") then
         local headPos = target.Character:FindFirstChild(TargetPartValue.Value).Position or target.Character.Head.Position
@@ -242,7 +229,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- UI Controls
 CombatTab:Toggle({
     Title = "Silent Aim",
     Value = SilentAimEnabledValue.Value,
@@ -355,7 +341,6 @@ task.spawn(function()
     end
 end)
 
-
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
@@ -363,7 +348,6 @@ local FireRateValue = Instance.new("NumberValue")
 FireRateValue.Name = "FireRateValue"
 FireRateValue.Value = 1500
 FireRateValue.Parent = LocalPlayer
-
 
 WeaponTab:Slider({
     Title = "Fire Rate",
@@ -682,7 +666,6 @@ local function GetHumanoid()
     return char:FindFirstChildOfClass("Humanoid")
 end
 
--- อัปเดต HumanoidRootPart
 local function GetRoot()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -790,7 +773,7 @@ end)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     if HideNameEnabled then
-        -- ตรวจสอบทุกตัวลูกที่ถูกสร้างใน Character ใหม่
+
         char.DescendantAdded:Connect(function(desc)
             if desc:IsA("BillboardGui") then
                 desc:Destroy()
@@ -855,7 +838,7 @@ local function StartUnderground()
         UndergroundAngle = (UndergroundAngle + SpinSpeed * delta) % 360
         local rad = math.rad(UndergroundAngle)
 
-        local offsetX = math.cos(rad) * 6 -- รัศมีวงหมุน 6
+        local offsetX = math.cos(rad) * 6
         local offsetZ = math.sin(rad) * 6
         local newPos = Vector3.new(hrp.Position.X + offsetX, initialY, hrp.Position.Z + offsetZ)
 
@@ -1050,7 +1033,6 @@ CheaterTab:Toggle({
     Value = PickupEnabled,
     Callback = function(state)
         PickupEnabled = state
-        print("🧲 Auto Pickup Items:", state and "ON" or "OFF")
     end
 })
 
@@ -1065,7 +1047,6 @@ CheaterTab:Slider({
     Callback = function(value)
         local player = game.Players.LocalPlayer
         player:SetAttribute("MaxStamina", value)
-        print("[✅] เปลี่ยนค่า MaxStamina =", value)
     end
 })
 
@@ -1167,14 +1148,12 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
 end)
 
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- Config
 local BOX_COLOR_DEFAULT = Color3.fromRGB(255, 255, 255)
 local BOX_COLOR_LOCKED = Color3.fromRGB(255, 0, 0)
 local BOX_THICKNESS = 2
@@ -1183,16 +1162,13 @@ local SCALE_MULTIPLIER = 1
 
 local espPlayers = {}
 
--- ตัวแปร CurrentTarget (ตาม tracerLine)
 local CurrentTarget = nil
 
--- แปลงตำแหน่งโลกเป็นหน้าจอ
 local function worldToViewport(pos)
     local screen, onScreen = Camera:WorldToViewportPoint(pos)
     return Vector2.new(screen.X, screen.Y), onScreen
 end
 
--- สร้างเส้น Box ESP
 local function createLines(color)
     local lines = {}
     for i=1,12 do
@@ -1206,7 +1182,6 @@ local function createLines(color)
     return lines
 end
 
--- สร้าง ESP สำหรับผู้เล่น
 local function createBoxESP(plr)
     if espPlayers[plr] or plr == LocalPlayer then return end
 
@@ -1218,7 +1193,6 @@ local function createBoxESP(plr)
             return
         end
 
-        -- ตรวจสอบ Character/HumanoidRootPart
         if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
             for _, line in ipairs(lines) do line.Visible = false end
             return
@@ -1242,13 +1216,11 @@ local function createBoxESP(plr)
             if not onScreen then allOnScreen = false end
         end
 
-        -- ถ้าไม่อยู่บนหน้าจอ → ซ่อนเส้น
         if not allOnScreen then
             for _, line in ipairs(lines) do line.Visible = false end
             return
         end
 
-        -- อัปเดตสีตาม CurrentTarget
         local targetColor = (CurrentTarget == plr) and BOX_COLOR_LOCKED or BOX_COLOR_DEFAULT
         if lines[1].Color ~= targetColor then
             for _, line in ipairs(lines) do line:Remove() end
@@ -1256,7 +1228,6 @@ local function createBoxESP(plr)
             espPlayers[plr].lines = lines
         end
 
-        -- อัปเดตตำแหน่งเส้น
         local edges = {
             {1,2},{2,3},{3,4},{4,1},
             {5,6},{6,7},{7,8},{8,5},
@@ -1273,7 +1244,6 @@ local function createBoxESP(plr)
     espPlayers[plr] = {connection = connection, lines = lines}
 end
 
--- ลบ ESP
 local function removeBoxESP(plr)
     if espPlayers[plr] then
         if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end
@@ -1282,21 +1252,18 @@ local function removeBoxESP(plr)
     end
 end
 
--- เปิด ESP ให้ทุกคน
 local function enableAllESP()
     for _, plr in pairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then createBoxESP(plr) end
     end
 end
 
--- ปิด ESP
 local function disableAllESP()
     for plr, _ in pairs(espPlayers) do
         removeBoxESP(plr)
     end
 end
 
--- Player Added / Removing
 Players.PlayerAdded:Connect(function(plr)
     task.wait(0.1)
     if _G.ESPEnabled then createBoxESP(plr) end
@@ -1316,10 +1283,9 @@ EspTab:Toggle({
     end
 })
 
--- อัปเดต CurrentTarget ตาม tracerLine ทุก frame และซิงค์ ESP แบบ realtime
 RunService.RenderStepped:Connect(function()
     -- ใช้ target ของ tracerLine / Silent Aim
-    local target = GetClosestTarget() -- จากโค้ดล็อคเดิมของคุณ
+    local target = GetClosestTarget()
     CurrentTarget = target
 end)
 
@@ -1531,9 +1497,8 @@ RunService.RenderStepped:Connect(function()
                 local humanoid = data.humanoid
                 local percent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
                 data.frame.Size = UDim2.new(percent,0,1,0)
-                data.frame.Position = UDim2.new(0,0,0,0) -- อยู่ซ้ายไปขวา
+                data.frame.Position = UDim2.new(0,0,0,0)
 
-                -- สีอ่อนตามเลือด
                 if percent > 0.5 then
                     data.frame.BackgroundColor3 = Color3.fromRGB(144,238,144)
                 elseif percent > 0.25 then
@@ -1554,7 +1519,6 @@ Players.PlayerAdded:Connect(function(plr)
     end
 end)
 
--- ผู้เล่นออก
 Players.PlayerRemoving:Connect(function(plr)
     if healthBars[plr] then
         healthBars[plr].bar:Destroy()
@@ -1581,7 +1545,7 @@ local function CreateESP(player)
 
     local highlight = Instance.new("Highlight")
     highlight.Name = "ESP_HIGHLIGHT"
-    highlight.FillColor = Color3.fromRGB(180, 40, 255) -- ม่วงทึบ
+    highlight.FillColor = Color3.fromRGB(180, 40, 255)
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.FillTransparency = 0.2
     highlight.OutlineTransparency = 0
@@ -1597,7 +1561,7 @@ end
 
 RunService.RenderStepped:Connect(function()
     if not ESPEnabledValue.Value then
-        -- ปิด ESP ลบทุกคนออก
+
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer then
                 RemoveESP(plr)
@@ -1787,7 +1751,6 @@ local function generateUniqueKey(tool)
     return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
 end
 
--- ลงทะเบียน Tool ทั้งหมด
 local function registerItems(folder)
     for _, tool in ipairs(folder:GetDescendants()) do
         if not tool:IsA("Tool") then continue end
@@ -1834,7 +1797,6 @@ local function getWeaponInfo(tool)
     return WeaponDB[key]
 end
 
--- สร้าง Billboard สำหรับผู้เล่น
 local function createBillboardForPlayer(player)
     if player == LocalPlayer then return end
 
@@ -1858,7 +1820,6 @@ local function createBillboardForPlayer(player)
         local backpack = player:FindFirstChild("Backpack")
         if backpack then scan(backpack) end
 
-        -- ถ้า Billboard หายหรือยังไม่มี สร้างใหม่
         if not BillboardCache[player] or not BillboardCache[player].Parent then
             local hrp = player.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
@@ -1879,7 +1840,6 @@ local function createBillboardForPlayer(player)
             BillboardCache[player] = billboard
         end
 
-        -- อัปเดต Tool ภายใน Billboard
         local container = BillboardCache[player]:FindFirstChildOfClass("Frame")
         if container then
             container:ClearAllChildren()
@@ -1905,15 +1865,13 @@ local function createBillboardForPlayer(player)
         end
     end
 
-    -- อัปเดตทันทีทุก 1 วินาที
-    task.spawn(function()
+task.spawn(function()
         while ItemESP_Enabled and player.Parent do
             pcall(updateESP)
             task.wait(1)
         end
     end)
 
-    -- เก็บ connection
     ItemESP_UpdateConnections[player] = {}
     if player.Character then
         table.insert(ItemESP_UpdateConnections[player], player.Character.ChildAdded:Connect(function()
@@ -1925,7 +1883,6 @@ local function createBillboardForPlayer(player)
     end
 end
 
--- ฟังก์ชันอัปเดตทุกคน (สร้าง Billboard ใหม่ถ้าหาย)
 local function UpdateAllItemESP()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
@@ -1945,7 +1902,6 @@ task.spawn(function()
     end
 end)
 
--- Loop สร้าง/รีเฟรช Billboard ใหม่ทุก 20 วินาที
 task.spawn(function()
     while true do
         task.wait(20)
@@ -2228,7 +2184,6 @@ ServerTab:Button({
                         local playing = server.playing or 0
 
                         if playing <= TargetPlayers and playing < server.maxPlayers then
-                            print("📌 เจอเซิร์ฟ:", server.id, " | คน:", playing)
                             TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
                             found = true
                             break
@@ -2254,7 +2209,6 @@ function Rejoin()
     local placeId = game.PlaceId
     local jobId = game.JobId
 
-    -- ถ้าเซิร์ฟไม่สามารถ rejoin แบบกลับห้องเดิมได้ จะ teleport ปกติแทน
     local success, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
     end)
@@ -2307,7 +2261,7 @@ function FindLowServer()
             local playing = server.playing or 0
 
             if playing < server.maxPlayers then
-                -- หาคนน้อยที่สุด
+
                 if (not lowestServer) or (playing < lowestServer.playing) then
                     lowestServer = server
                 end
@@ -2468,187 +2422,5 @@ ServerTab:Button({
     Locked = false,
     Callback = function()
         removeDoors()
-        print("✅ DoorSystem & all doors removed!")
-    end
-})
-
-local ShowFPS = false
-
-OtherTab:Keybind({
-    Title = "Keybind",
-    Desc = "เซตคีย์บอร์ดเพื่อเปิด ui",
-    Value = "G",
-    Callback = function(v)
-        Window:SetToggleKey(Enum.KeyCode[v])
-    end
-})
-
-OtherTab:Section({Title="Misc  :"})
-
-
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local player = Players.LocalPlayer
-
-local CounterTable
-pcall(function()
-    for _, Obj in ipairs(getgc(true)) do
-        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
-            CounterTable = Obj
-            break
-        end
-    end
-end)
-
--- Net.get Function
-local Net = {}
-local function NetGet(...)
-    if not CounterTable or not CounterTable.func then
-        warn("❌ CounterTable ไม่พบ!")
-        return
-    end
-    local args = {...}
-    CounterTable.func = (CounterTable.func or 0) + 1
-    local success, result = pcall(function()
-        local GetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Get")
-        return GetRemote:InvokeServer(CounterTable.func, unpack(args))
-    end)
-    if not success then
-        warn("[NetGet Error]", result)
-    end
-    return result
-end
-function Net.get(...)
-    return NetGet(...)
-end
-
--- Claim All Function
-local function ClaimAllQuests()
-    local success, questFrame = pcall(function()
-        return player:WaitForChild("PlayerGui"):WaitForChild("Quests"):WaitForChild("QuestsHolder"):WaitForChild("QuestsScrollingFrame")
-    end)
-    if not success or not questFrame then
-        warn("❌ Quest GUI ไม่พบ! (ยังไม่เปิด Quests)")
-        return 0
-    end
-    
-    local claimed = 0
-    for _, child in ipairs(questFrame:GetChildren()) do
-        if (child:IsA("Frame") or child:IsA("TextButton") or child:IsA("ImageButton")) and child.Name ~= "" then
-            pcall(function()
-                Net.get("claim_quest", child.Name)
-            end)
-            claimed = claimed + 1
-            task.wait(0.2)
-        end
-    end
-    return claimed
-end
-
-OtherTab:Button({
-    Title = "Claim All Quests",
-    Locked = false,
-    Callback = function()
-        local claimed = ClaimAllQuests()  -- เรียกฟังก์ชัน ClaimAllQuests
-        if claimed > 0 then
-            print("✅ Claimed", claimed, "Quests!")
-        else
-            print("ℹ️ ไม่มี Quest ให้ Claim")
-        end
-    end
-})
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-
--- Variables Toggle
-local ShowPing = false
-local ShowFPS = false
-
--- ScreenGui รวม
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "StatsDisplay"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = PlayerGui
-
--- Ping Label
-local pingLabel = Instance.new("TextLabel")
-pingLabel.Size = UDim2.new(0, 150, 0, 30)
-pingLabel.Position = UDim2.new(0, 10, 0, 10)
-pingLabel.BackgroundTransparency = 1
-pingLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-pingLabel.Font = Enum.Font.SourceSansBold
-pingLabel.TextSize = 18
-pingLabel.Text = "Ping: 0 ms"
-pingLabel.TextXAlignment = Enum.TextXAlignment.Left
-pingLabel.TextYAlignment = Enum.TextYAlignment.Top
-pingLabel.Visible = false
-pingLabel.Parent = screenGui
-
--- FPS Label
-local fpsLabel = Instance.new("TextLabel")
-fpsLabel.Size = UDim2.new(0, 100, 0, 25)
-fpsLabel.Position = UDim2.new(0, 10, 0, 45) -- ข้างล่าง Ping เล็กน้อย
-fpsLabel.BackgroundTransparency = 1
-fpsLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-fpsLabel.Font = Enum.Font.SourceSansBold
-fpsLabel.TextSize = 18
-fpsLabel.Text = "FPS: 0"
-fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
-fpsLabel.TextYAlignment = Enum.TextYAlignment.Top
-fpsLabel.Visible = false
-fpsLabel.Parent = screenGui
-
--- ฟังก์ชันเช็ค Ping
-local function getPing()
-    local ok, ping = pcall(function()
-        return LocalPlayer:GetNetworkPing() * 1000
-    end)
-    if ok and ping then return math.floor(ping) end
-    return 0
-end
-
--- FPS Variables
-local lastTime = tick()
-local frameCount = 0
-
--- RenderStepped อัปเดตทั้ง Ping และ FPS
-RunService.RenderStepped:Connect(function()
-    -- Ping
-    if ShowPing then
-        pingLabel.Text = "Ping: " .. getPing() .. " ms"
-    end
-
-    -- FPS
-    if ShowFPS then
-        frameCount = frameCount + 1
-        local currentTime = tick()
-        if currentTime - lastTime >= 1 then
-            fpsLabel.Text = "FPS: " .. tostring(frameCount)
-            frameCount = 0
-            lastTime = currentTime
-        end
-    end
-end)
-
-OtherTab:Toggle({
-    Title = "Show Ping",
-    Value = ShowPing,
-    Callback = function(state)
-        ShowPing = state
-        pingLabel.Visible = state
-    end
-})
-
-OtherTab:Toggle({
-    Title = "Show FPS",
-    Value = ShowFPS,
-    Callback = function(state)
-        ShowFPS = state
-        fpsLabel.Visible = state
     end
 })
