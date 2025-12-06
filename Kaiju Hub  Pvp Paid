@@ -2565,65 +2565,34 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- สร้าง ScreenGui
+-- Variables Toggle
+local ShowPing = false
+local ShowFPS = false
+
+-- ScreenGui รวม
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "PingDisplay"
+screenGui.Name = "StatsDisplay"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = PlayerGui
 
--- สร้าง TextLabel
+-- Ping Label
 local pingLabel = Instance.new("TextLabel")
 pingLabel.Size = UDim2.new(0, 150, 0, 30)
-pingLabel.Position = UDim2.new(0, 10, 0, 10) -- มุมซ้ายบน
-pingLabel.BackgroundTransparency = 1 -- ไม่มีพื้นหลัง
-pingLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- สีแดง
+pingLabel.Position = UDim2.new(0, 10, 0, 10)
+pingLabel.BackgroundTransparency = 1
+pingLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
 pingLabel.Font = Enum.Font.SourceSansBold
 pingLabel.TextSize = 18
-pingLabel.Text = "ping : 0 ms"
-pingLabel.Visible = false -- เริ่มแรกปิดไว้
+pingLabel.Text = "Ping: 0 ms"
+pingLabel.TextXAlignment = Enum.TextXAlignment.Left
+pingLabel.TextYAlignment = Enum.TextYAlignment.Top
+pingLabel.Visible = false
 pingLabel.Parent = screenGui
 
--- ฟังก์ชันเช็ค ping
-local function getPing()
-    local ok, ping = pcall(function()
-        return LocalPlayer:GetNetworkPing() * 1000 -- แปลงเป็น ms
-    end)
-    if ok and ping then
-        return math.floor(ping)
-    end
-    return 0
-end
-
--- อัปเดตทุกเฟรม
-RunService.RenderStepped:Connect(function()
-    if pingLabel.Visible then
-        pingLabel.Text = "ping : "..getPing().." ms"
-    end
-end)
-
-OtherTab:Toggle({
-    Title = "Show Ping",
-    Value = false,
-    Callback = function(state)
-        pingLabel.Visible = state
-    end
-})
-
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-
--- ScreenGui
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FPSDisplay"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = PlayerGui
-
--- TextLabel สำหรับ FPS
+-- FPS Label
 local fpsLabel = Instance.new("TextLabel")
 fpsLabel.Size = UDim2.new(0, 100, 0, 25)
-fpsLabel.Position = UDim2.new(0, 10, 0, 40) -- ข้างล่างปิงเล็กน้อย
+fpsLabel.Position = UDim2.new(0, 10, 0, 45) -- ข้างล่าง Ping เล็กน้อย
 fpsLabel.BackgroundTransparency = 1
 fpsLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
 fpsLabel.Font = Enum.Font.SourceSansBold
@@ -2631,22 +2600,30 @@ fpsLabel.TextSize = 18
 fpsLabel.Text = "FPS: 0"
 fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
 fpsLabel.TextYAlignment = Enum.TextYAlignment.Top
+fpsLabel.Visible = false
 fpsLabel.Parent = screenGui
 
-OtherTab:Toggle({
-    Title = "Show FPS",
-    Value = ShowFPS,
-    Callback = function(state)
-        ShowFPS = state
-        fpsLabel.Visible = state
-    end
-})
+-- ฟังก์ชันเช็ค Ping
+local function getPing()
+    local ok, ping = pcall(function()
+        return LocalPlayer:GetNetworkPing() * 1000
+    end)
+    if ok and ping then return math.floor(ping) end
+    return 0
+end
 
--- อัปเดต FPS ทุกเฟรม
+-- FPS Variables
 local lastTime = tick()
 local frameCount = 0
 
+-- RenderStepped อัปเดตทั้ง Ping และ FPS
 RunService.RenderStepped:Connect(function()
+    -- Ping
+    if ShowPing then
+        pingLabel.Text = "Ping: " .. getPing() .. " ms"
+    end
+
+    -- FPS
     if ShowFPS then
         frameCount = frameCount + 1
         local currentTime = tick()
@@ -2657,3 +2634,21 @@ RunService.RenderStepped:Connect(function()
         end
     end
 end)
+
+OtherTab:Toggle({
+    Title = "Show Ping",
+    Value = ShowPing,
+    Callback = function(state)
+        ShowPing = state
+        pingLabel.Visible = state
+    end
+})
+
+OtherTab:Toggle({
+    Title = "Show FPS",
+    Value = ShowFPS,
+    Callback = function(state)
+        ShowFPS = state
+        fpsLabel.Visible = state
+    end
+})
