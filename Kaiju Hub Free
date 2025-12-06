@@ -17,14 +17,6 @@ local Window = WindUI:CreateWindow({
     Resizable = true,
 })
 
-Window:Tag({
-    Title = "v 0.2.9 t",
-    Icon = "cloud",
-    Color = Color3.fromHex("#2889F7"),
-    Radius = 13,
-})
-
-    --       remove this all, 
     -- !  ↓  if you DON'T need the key system
     KeySystem = { 
         -- ↓ Optional. You can remove it.
@@ -48,6 +40,13 @@ Window:Tag({
         -- API = {} ← Services. Read about it below ↓
     },
 })
+
+Window:Tag({
+    Title = "v 0.2.9 t",
+    Icon = "cloud",
+    Color = Color3.fromHex("#2889F7"),
+    Radius = 13,
+}) 
 
 local CombatTab = Window:Tab({Title = "COMBAT:", Icon = "crosshair"})
 local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "blocks"})
@@ -135,7 +134,7 @@ local function AntiLockPrediction(part)
 end
 
 local function IsIgnored(plr)
-    for _, name in ipairs(IgnorePlayers) do
+    for _, DON'Tve in ipairs(IgnorePlayers) do
         if string.lower(plr.Name) == string.lower(name) then
             return true
         end
