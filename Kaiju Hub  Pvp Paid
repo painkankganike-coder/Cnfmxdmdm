@@ -63,11 +63,14 @@ AttackAntiLockEnabledValue.Parent = LocalPlayer
 local IgnorePlayers = {}
 local CurrentTarget, head, aimPos
 local hue = 0
+local lastPositions = {}
 
+-- ปืนที่รองรับ
 local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
 local GunLookup = {}
 for _, name in pairs(GunNames) do GunLookup[name] = true end
 
+-- FOV Circle
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1
 fovCircle.NumSides = 100
@@ -76,36 +79,60 @@ fovCircle.Filled = false
 fovCircle.Visible = SilentAimEnabledValue.Value
 fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 
+-- Tracer
 local tracerLine = Drawing.new("Line")
 tracerLine.Thickness = 1
 tracerLine.Visible = false
 
-local PREDICT = 0.165
-local LastHealth = {}
+-- ====================
+-- คาดเดาตำแหน่ง
+-- ====================
+local PREDICTION_FACTOR = 0.165
+local PREDICTION_DISTANCE = 6 -- ระยะคาดเดา 6 studs
 
-local function VelocityPrediction(part)
-    if not part or not part.Parent then return Vector3.new() end
-    local partSize = (part:IsA("BasePart") and part.Size.Y or 1)
-    local root = part.Parent:FindFirstChild("HumanoidRootPart")
-    local vel = root and root.Velocity or Vector3.new()
-    return part.Position + Vector3.new(0, partSize/2, 0) + vel * PREDICT
+local function PredictPosition(headPart)
+    local root = headPart.Parent:FindFirstChild("HumanoidRootPart")
+    if not root then return headPart.Position end
+    local velocity = root.Velocity
+    local prediction = headPart.Position + (velocity * PREDICTION_FACTOR)
+    local seat = root:FindFirstChildWhichIsA("WeldConstraint") or root:FindFirstChildWhichIsA("Weld")
+    if seat and seat.Part0 then
+        prediction = headPart.Position + (seat.Part0.Velocity * PREDICTION_FACTOR * 1.2)
+    end
+    return prediction
 end
 
 local function AntiLockPrediction(part)
     if not part or not part.Parent then return part.Position end
     local root = part.Parent:FindFirstChild("HumanoidRootPart")
     local humanoid = part.Parent:FindFirstChild("Humanoid")
-    if not humanoid then return part.Position end
+    if not humanoid or not root then return part.Position end
 
     local headPos = part.Position + Vector3.new(0, (part:IsA("BasePart") and part.Size.Y or 1)/2, 0)
 
     if AttackAntiLockEnabledValue.Value then
-        local speed = root and root.Velocity.Magnitude or 0
-        local forward = part.CFrame.LookVector
-        local factor = (speed >= 14) and 5 or 0  >= 14
-        return headPos + forward * factor
+        local velocity = root.Velocity
+        local speed = velocity.Magnitude
+
+        if speed >= 15 then
+            local direction = velocity.Unit
+            return headPos + direction * PREDICTION_DISTANCE
+        else
+            local lastPos = lastPositions[part.Parent] or root.Position
+            local movement = root.Position - lastPos
+            lastPositions[part.Parent] = root.Position
+
+            local direction = Vector3.new(0,0,0)
+            if movement.Magnitude > 0.05 then
+                direction = movement.Unit
+            else
+                direction = part.CFrame.LookVector
+            end
+
+            return headPos + direction * PREDICTION_DISTANCE
+        end
     else
-        return VelocityPrediction(part)
+        return PredictPosition(part)
     end
 end
 
@@ -183,6 +210,7 @@ oldFire = hookfunction(send.FireServer, function(self, ...)
 
             args[5] = {[1] = {[1] = {["Instance"] = head, ["Position"] = aimPos}}}
 
+            -- Beam
             local ourHead = LocalPlayer.Character.Head
             local distance = (aimPos - ourHead.Position).Magnitude
             local beam = Instance.new("Part", workspace)
@@ -210,7 +238,7 @@ RunService.RenderStepped:Connect(function()
     end
 
     local target = GetClosestTarget()
-    CurrentTarget = target
+    CurrentTarget = target -- อัปเดตทุกเฟรมตาม tracerLine
 
     if target and target.Character and target.Character:FindFirstChild("Head") then
         local headPos = target.Character:FindFirstChild(TargetPartValue.Value).Position or target.Character.Head.Position
@@ -229,6 +257,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- UI Controls
 CombatTab:Toggle({
     Title = "Silent Aim",
     Value = SilentAimEnabledValue.Value,
@@ -257,7 +286,7 @@ CombatTab:Slider({
 CombatTab:Slider({
     Title = "Lock Distance :",
     Step = 25,
-    Value = {Min = 50, Max = 1000, Default = LockDistanceValue.Value},
+    Value = {Min = 50, Max = 3000, Default = LockDistanceValue.Value},
     Callback = function(value) LockDistanceValue.Value = value end
 })
 
@@ -313,67 +342,59 @@ local LocalPlayer = Players.LocalPlayer
 
 local FireRateValue = Instance.new("NumberValue")
 FireRateValue.Name = "FireRateValue"
-FireRateValue.Value = 1000
+FireRateValue.Value = 1200
 FireRateValue.Parent = LocalPlayer
 
 WeaponTab:Slider({
     Title = "Fire Rate",
-    Step = 100,
-    Value = {Min = 1, Max = 2000, Default = FireRateValue.Value},
+    Step = 1,
+    Value = {Min = 1, Max = 3000, Default = FireRateValue.Value},
     Callback = function(value)
         FireRateValue.Value = value
     end
 })
 
-task.spawn(function()
-    while true do
-        local rate = FireRateValue.Value
-        for _, v in pairs(getgc(true)) do
-            if typeof(v) == "table" and rawget(v, "states") then
-                local s = v.states
+local updatedTools = {}
+
+local function UpdateToolFireRate(tool)
+    if not tool then return end
+    if updatedTools[tool] then return end
+    updatedTools[tool] = true
+
+    for _, v in pairs(getgc(true)) do
+        if typeof(v) == "table" and rawget(v, "states") then
+            local s = v.states
+            if s.instance == tool then
                 if s.fire_rate and s.fire_rate.set then
-                    s.fire_rate:set(rate) 
+                    s.fire_rate:set(FireRateValue.Value)
                 end
             end
         end
-        task.wait(0.03)
+    end
+end
+
+-- ตรวจจับ Tool ใหม่ตอนถือ
+LocalPlayer.Character.ChildAdded:Connect(function(child)
+    if child:IsA("Tool") then
+        UpdateToolFireRate(child)
     end
 end)
 
-local AutoEnabled = false
-
-WeaponTab:Toggle({
-    Title = "Automatic",
-    Value = AutoEnabled,
-    Callback = function(state)
-        AutoEnabled = state
-    end
-})
-
+-- ตรวจสอบ Tool ที่ถืออยู่ตอนโหลด
 task.spawn(function()
-    while true do
-        if AutoEnabled then
-            for _, v in pairs(getgc(true)) do
-                if typeof(v) == "table" and rawget(v, "states") then
-                    local s = v.states
-                    if s.automatic and s.automatic.set then
-                        s.automatic:set(true)
-                    end
-                end
+    local char = LocalPlayer.Character
+    if char then
+        for _, tool in pairs(char:GetChildren()) do
+            if tool:IsA("Tool") then
+                UpdateToolFireRate(tool)
             end
         end
-        task.wait(0.3)
     end
 end)
 
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
+-- No Recoil
 local GunModule = require(ReplicatedStorage.Modules.Game.ItemTypes.Gun)
-
 getgenv().NoRecoilEnabled = false
-
 local original_recoil = GunModule.apply_recoil
 local antiLoop = nil
 
@@ -389,112 +410,64 @@ local function EnableNoRecoil()
 
     antiLoop = task.spawn(function()
         while getgenv().NoRecoilEnabled do
-            local char = Players.LocalPlayer.Character
+            local char = LocalPlayer.Character
             local tool = char and char:FindFirstChildOfClass("Tool")
             if tool and tool:GetAttribute("Recoil") then
                 tool:SetAttribute("Recoil", 0)
             end
-
             for _, gun in pairs(getgc(true)) do
                 if typeof(gun) == "table" and rawget(gun, "instance") and gun.instance then
                     gun.instance:SetAttribute("Recoil", 0)
                 end
             end
-
             task.wait(0.3)
         end
     end)
-
 end
-
 
 local function DisableNoRecoil()
     if not getgenv().NoRecoilEnabled then return end
     getgenv().NoRecoilEnabled = false
-
     GunModule.apply_recoil = original_recoil
-
     if antiLoop then
         task.cancel(antiLoop)
         antiLoop = nil
     end
-
 end
 
 function ToggleNoRecoil(state)
-    if state then
-        EnableNoRecoil()
-    else
-        DisableNoRecoil()
-    end
+    if state then EnableNoRecoil() else DisableNoRecoil() end
 end
 
 WeaponTab:Toggle({
     Title = "No Recoil",
-    Icon = "circle-check",
     Value = false,
     Callback = function(state)
         ToggleNoRecoil(state)
     end
 })
 
-
-WeaponTab:Section({Title="auto hit :"})
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+-- Hit Aura
+WeaponTab:Section({Title="Auto Hit :"})
 getgenv().HitAuraEnabled = false
-
-local CounterTable
-pcall(function()
-    for _, Obj in ipairs(getgc(true)) do
-        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
-            CounterTable = Obj
-            break
-        end
-    end
-end)
-
-local SendRemote
-pcall(function()
-    local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
-    SendRemote = Remotes:WaitForChild("Send", 5)
-end)
-
-local function NetSend(...)
-    if not CounterTable or not CounterTable.event or not SendRemote then
-        return
-    end
-    local args = {...}
-    CounterTable.event = (CounterTable.event or 0) + 1
-    pcall(function()
-        SendRemote:FireServer(CounterTable.event, unpack(args))
-    end)
-end
+local autoLoop = nil
 
 local function getActiveTool()
-    local char = player.Character
+    local char = LocalPlayer.Character
     if not char then return nil end
     for _, obj in pairs(char:GetChildren()) do
-        if obj:IsA("Tool") then
-            return obj
-        end
+        if obj:IsA("Tool") then return obj end
     end
     return nil
 end
 
 local function getPlayersInRange(radius)
     local inRange = {}
-    local char = player.Character
+    local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return inRange end
     local pos = char.HumanoidRootPart.Position
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart")
             and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
             local dist = (p.Character.HumanoidRootPart.Position - pos).Magnitude
             if dist <= radius then
@@ -508,19 +481,36 @@ end
 local function AttackNearby()
     local tool = getActiveTool()
     if not tool then return end
-    
     local targets = getPlayersInRange(12)
     for _, target in ipairs(targets) do
-        local hrp = player.Character.HumanoidRootPart
+        local hrp = LocalPlayer.Character.HumanoidRootPart
         local targetHRP = target.Character.HumanoidRootPart
         if hrp and targetHRP then
             local lookAtCFrame = CFrame.lookAt(hrp.Position, targetHRP.Position)
-            NetSend("melee_attack", tool, {target}, lookAtCFrame, 0.75)
+            local CounterTable
+            pcall(function()
+                for _, Obj in ipairs(getgc(true)) do
+                    if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
+                        CounterTable = Obj
+                        break
+                    end
+                end
+            end)
+            local SendRemote
+            pcall(function()
+                local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+                SendRemote = Remotes:WaitForChild("Send", 5)
+            end)
+            if CounterTable and SendRemote then
+                CounterTable.event = (CounterTable.event or 0) + 1
+                pcall(function()
+                    SendRemote:FireServer(CounterTable.event, "melee_attack", tool, {target}, lookAtCFrame, 0.75)
+                end)
+            end
         end
     end
 end
 
-local autoLoop
 local function StartHitAura()
     if autoLoop then return end
     autoLoop = task.spawn(function()
@@ -548,15 +538,13 @@ function ToggleHitAura(state)
     end
 end
 
- WeaponTab:Toggle({
-     Title = "Hit Aura",
-     Icon = "circle-check",
-     Default = false,
-     Callback = function(state)
-         ToggleHitAura(state)
-     end
- })
-
+WeaponTab:Toggle({
+    Title = "Hit Aura",
+    Default = false,
+    Callback = function(state)
+        ToggleHitAura(state)
+    end
+})
 local SpeedEnabled = false
 local speedMultiplier = 0.10
 local HideNameEnabled = false
