@@ -543,10 +543,8 @@ function ToggleHitAura(state)
     if state then
         getgenv().HitAuraEnabled = true
         StartHitAura()
-        print("✅ Hit Aura: ON")
     else
         StopHitAura()
-        print("❌ Hit Aura: OFF")
     end
 end
 
@@ -913,9 +911,6 @@ CheaterTab:Toggle({
         AntiRagdollEnabled = state
         if AntiRagdollEnabled then
             startAntiRagdoll()
-            print("✅ Anti Ragdoll ON")
-        else
-            print("❌ Anti Ragdoll OFF")
         end
     end
 })
@@ -2351,7 +2346,6 @@ ServerTab:Button({
         local road = mapFolder:FindFirstChild("RoadNetwork")
         if road then
             road:Destroy()
-            print("✅ ลบ RoadNetwork เรียบร้อยแล้ว!")
         else
             warn("❌ ไม่พบ Map.RoadNetwork")
         end
