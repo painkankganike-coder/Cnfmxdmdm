@@ -27,7 +27,7 @@ Window:Tag({
 local CombatTab = Window:Tab({Title = "COMBAT:", Icon = "crosshair"})
 local WeaponTab = Window:Tab({Title = "WEAPON MODS:", Icon = "blocks"})
 local CheaterTab = Window:Tab({Title = "CHEATER:", Icon = "user"})
-local EspTab = Window:Tab({Title = "Esp", Icon = "align-start-vertical"})
+local EspTab = Window:Tab({Title = "ESP:", Icon = "scan-eye"})
 local MiscTab = Window:Tab({Title = "MISC:", Icon = "warehouse"})
 
 local SilentAimEnabledValue = Instance.new("BoolValue")
