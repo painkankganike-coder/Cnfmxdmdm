@@ -1097,9 +1097,6 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
 end)
 
-
-
-
 local Players = game:GetService("Players")  
 local RunService = game:GetService("RunService")  
 local Workspace = game:GetService("Workspace")  
