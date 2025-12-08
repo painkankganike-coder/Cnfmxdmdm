@@ -1100,16 +1100,22 @@ end)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
-local camera = workspace.CurrentCamera
+local camera = Workspace.CurrentCamera
 
 -- Config
 local BOX_COLOR = Color3.fromRGB(255, 255, 255)
 local BOX_THICKNESS = 2
 local SCALE_MULTIPLIER = 1
 
--- เก็บ ESP ของแต่ละผู้เล่น
+-- Table เก็บ ESP ของแต่ละคน
 local espPlayers = {}
+
+-- ตัวแปรล็อคเป้า tracerLine
+local CurrentTarget = nil
+local tracerLine = Drawing.new("Line") -- สมมติว่า tracerLine ถูกสร้างแล้ว
+tracerLine.Visible = false
 
 -- แปลงตำแหน่งโลกเป็นหน้าจอ
 local function worldToViewport(pos)
@@ -1118,7 +1124,7 @@ local function worldToViewport(pos)
 end
 
 -- สร้าง Box ESP
-local function createBoxESP(plr, getCurrentTarget)
+local function createBoxESP(plr)
     if espPlayers[plr] or plr == LocalPlayer then return end
 
     local lines = {}
@@ -1161,8 +1167,8 @@ local function createBoxESP(plr, getCurrentTarget)
             return
         end
 
-        -- เปลี่ยนสีเป็นแดงถ้า CurrentTarget เล็งผู้เล่นนี้
-        local color = (getCurrentTarget() == plr) and Color3.fromRGB(255,0,0) or BOX_COLOR
+        -- เปลี่ยนสีถ้าเป็นเป้าหมาย tracerLine
+        local color = (CurrentTarget == plr) and Color3.fromRGB(255,0,0) or BOX_COLOR
 
         local edges = {
             {1,2},{2,3},{3,4},{4,1},
@@ -1192,9 +1198,9 @@ local function removeBoxESP(plr)
 end
 
 -- สร้าง ESP ทั้งหมด
-local function enableAllESP(getCurrentTarget)
+local function enableAllESP()
     for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then createBoxESP(plr, getCurrentTarget) end
+        if plr ~= LocalPlayer then createBoxESP(plr) end
     end
 end
 
@@ -1208,19 +1214,21 @@ end
 -- Player Added/Removing
 Players.PlayerAdded:Connect(function(plr)
     task.wait(1)
-    if _G.ESPEnabled then createBoxESP(plr, function() return _G.CurrentTarget end) end
+    if _G.ESPEnabled then createBoxESP(plr) end
 end)
 Players.PlayerRemoving:Connect(removeBoxESP)
 
--- ตัวอย่างการใช้กับ Toggle (WindUI)
+-- กำหนดค่าเริ่มต้น
+_G.ESPEnabled = false
+
+-- Toggle ESP
 EspTab:Toggle({
     Title = "Box",
-    Icon = "eye",
-    Default = false,
+    Value = _G.ESPEnabled,  -- ใช้ตัวแปรจริง
     Callback = function(state)
         _G.ESPEnabled = state
         if state then
-            enableAllESP(function() return _G.CurrentTarget end)
+            enableAllESP()
             print("✅ ESP Box: ON")
         else
             disableAllESP()
