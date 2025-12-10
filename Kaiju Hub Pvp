@@ -18,7 +18,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:Tag({
-    Title = "v0.0.3",
+    Title = "v0.2.3",
     Icon = "cloud",
     Color = Color3.fromHex("#2889F7"),
     Radius = 13,
@@ -292,7 +292,7 @@ CombatTab:Slider({
 CombatTab:Slider({
     Title = "Lock Distance :",
     Step = 25,
-    Value = {Min = 50, Max = 1000, Default = LockDistanceValue.Value},
+    Value = {Min = 50, Max = 3000, Default = LockDistanceValue.Value},
     Callback = function(value) LockDistanceValue.Value = value end
 })
 
