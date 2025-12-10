@@ -32,7 +32,10 @@ local MiscTab = Window:Tab({Title = "MISC:", Icon = "warehouse"})
 MiscTab:Section({Title="Misc :"})
 local EspTab = Window:Tab({Title = "Esp", Icon = "user"})
 EspTab:Section({Title="Esp PLAYER  :"})
-
+local WeaponTab = Window:Tab({Title = "Weapon Mods:", Icon = "crosshair"})
+WeaponTab:Section({Title="Weapon Mods :"})
+local = "Server", Icon = "server"})
+ServerTab:Section({Title="Server Hop  :"})
 
 local SilentAimEnabledValue = Instance.new("BoolValue")
 SilentAimEnabledValue.Name = "SilentAimEnabled"
