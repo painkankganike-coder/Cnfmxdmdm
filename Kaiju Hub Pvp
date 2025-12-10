@@ -277,6 +277,8 @@ CombatTab:Toggle({
     end
 })
 
+CombatTab:Space()
+
 CombatTab:Slider({
     Title = "FOV :",
     Step = 5,
