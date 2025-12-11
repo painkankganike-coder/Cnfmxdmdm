@@ -37,7 +37,6 @@ WeaponTab:Section({Title="Weapon Mods :"})
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
 ServerTab:Section({Title="Server Hop  :"})
 
-            local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
