@@ -39,64 +39,69 @@ ServerTab:Section({Title="Server Hop  :"})
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
+local camera = workspace.CurrentCamera
 
-local BOX_COLOR = Color3.fromRGB(255,255,255)
-local TARGET_COLOR = Color3.fromRGB(255,0,0)
+-- Config
+local BOX_COLOR = Color3.fromRGB(255, 255, 255)
+local BOX_THICKNESS = 2
+local SCALE_MULTIPLIER = 1
 
+-- เก็บ ESP ของแต่ละผู้เล่น
 local espPlayers = {}
 
-local function worldToScreen(pos)
-    local p, onScreen = Camera:WorldToViewportPoint(pos)
-    return Vector2.new(p.X, p.Y), onScreen
+-- แปลงตำแหน่งโลกเป็นหน้าจอ
+local function worldToViewport(pos)
+    local screen, onScreen = camera:WorldToViewportPoint(pos)
+    return Vector2.new(screen.X, screen.Y), onScreen
 end
 
-local function createBox(plr)
-    if plr == LocalPlayer or espPlayers[plr] then return end
+-- สร้าง Box ESP
+local function createBoxESP(plr, getCurrentTarget)
+    if espPlayers[plr] or plr == LocalPlayer then return end
 
     local lines = {}
     for i = 1, 12 do
         local line = Drawing.new("Line")
-        line.Thickness = 2
-        line.Color = BOX_COLOR
         line.Visible = false
+        line.Color = BOX_COLOR
+        line.Thickness = BOX_THICKNESS
+        line.Transparency = 1
         lines[i] = line
     end
 
-    local conn
-    conn = RunService.RenderStepped:Connect(function()
+    local connection = RunService.RenderStepped:Connect(function()
         if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
-            for _, l in ipairs(lines) do l.Visible = false end
+            for _, line in ipairs(lines) do line.Visible = false end
             return
         end
 
         local root = plr.Character.HumanoidRootPart
         local rootPos = root.Position
-        local scale = root.Size.Y
+        local scale = root.Size.Y * SCALE_MULTIPLIER
 
         local corners = {
             Vector3.new(-1,  2, -1), Vector3.new( 1,  2, -1), Vector3.new( 1,  2,  1), Vector3.new(-1,  2,  1),
             Vector3.new(-1, -2, -1), Vector3.new( 1, -2, -1), Vector3.new( 1, -2,  1), Vector3.new(-1, -2,  1)
         }
 
-        local screen = {}
-        local visible = true
+        local screenCorners = {}
+        local allOnScreen = true
 
         for i, offset in ipairs(corners) do
-            local world = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
-            local s, onScreen = worldToScreen(world)
-            screen[i] = s
-            visible = visible and onScreen
+            local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
+            local screenPos, onScreen = worldToViewport(worldPos)
+            screenCorners[i] = screenPos
+            if not onScreen then allOnScreen = false end
         end
 
-        if not visible then
-            for _, l in ipairs(lines) do l.Visible = false end
+        if not allOnScreen then
+            for _, line in ipairs(lines) do line.Visible = false end
             return
         end
 
-        -- ถ้าเป็นเป้าหมาย Silent Aim → สีแดง
-        local color = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
+        -- เปลี่ยนสีเป็นแดงทันทีถ้า CurrentTarget เล็งผู้เล่นนี้
+        local color = (getCurrentTarget() == plr) and Color3.fromRGB(255,0,0) or BOX_COLOR
 
         local edges = {
             {1,2},{2,3},{3,4},{4,1},
@@ -104,53 +109,62 @@ local function createBox(plr)
             {1,5},{2,6},{3,7},{4,8}
         }
 
-        for i, e in ipairs(edges) do
-            local l = lines[i]
-            l.From = screen[e[1]]
-            l.To = screen[e[2]]
-            l.Color = color
-            l.Visible = true
+        for i, edge in ipairs(edges) do
+            local line = lines[i]
+            line.From = screenCorners[edge[1]]
+            line.To = screenCorners[edge[2]]
+            line.Color = color
+            line.Visible = true
         end
     end)
 
-    espPlayers[plr] = {connection = conn, lines = lines}
+    espPlayers[plr] = {connection = connection, lines = lines}
 end
 
-local function removeBox(plr)
-    if not espPlayers[plr] then return end
-    espPlayers[plr].connection:Disconnect()
-    for _, l in ipairs(espPlayers[plr].lines) do l:Remove() end
-    espPlayers[plr] = nil
-end
-
-local function enableESP()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then createBox(plr) end
+-- ลบ Box ESP
+local function removeBoxESP(plr)
+    if espPlayers[plr] then
+        if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end
+        for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end
+        espPlayers[plr] = nil
     end
 end
 
-local function disableESP()
+-- สร้าง ESP ทั้งหมด
+local function enableAllESP(getCurrentTarget)
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then createBoxESP(plr, getCurrentTarget) end
+    end
+end
+
+-- ลบ ESP ทั้งหมด
+local function disableAllESP()
     for plr, _ in pairs(espPlayers) do
-        removeBox(plr)
+        removeBoxESP(plr)
     end
 end
 
+-- Player Added/Removing
 Players.PlayerAdded:Connect(function(plr)
     task.wait(1)
-    if ESPEnabledValue and ESPEnabledValue.Value then
-        createBox(plr)
-    end
+    if _G.ESPEnabled then createBoxESP(plr, function() return _G.CurrentTarget end) end
 end)
+Players.PlayerRemoving:Connect(removeBoxESP)
 
-Players.PlayerRemoving:Connect(removeBox)
-
--- UI Toggle
+-- Toggle ตัวอย่าง (WindUI)
 EspTab:Toggle({
-    Title = "Box ESP",
-    Value = ESPEnabledValue.Value,
-    Callback = function(v)
-        ESPEnabledValue.Value = v
-        if v then enableESP() else disableESP() end
+    Title = "Box",
+    Icon = "eye",
+    Default = false,
+    Callback = function(state)
+        _G.ESPEnabled = state
+        if state then
+            enableAllESP(function() return _G.CurrentTarget end)
+            print("✅ ESP Box: ON")
+        else
+            disableAllESP()
+            print("❌ ESP Box: OFF")
+        end
     end
 })
 
