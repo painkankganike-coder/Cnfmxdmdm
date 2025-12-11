@@ -49,80 +49,110 @@ ESPEnabledValue.Parent = LocalPlayer
 
 local espPlayers = {}
 
-local BOX_COLOR = Color3.fromRGB(255, 255, 255)
 local BOX_THICKNESS = 2
-local SCALE_MULTIPLIER = 1
+local SCALE = 1
+
+local WHITE = Color3.fromRGB(255,255,255)
+local RED   = Color3.fromRGB(255,0,0)
 
 
-local function worldToViewport(pos)
-    local screen, onScreen = Camera:WorldToViewportPoint(pos)
-    return Vector2.new(screen.X, screen.Y), onScreen
+local function toScreen(pos)
+    local p, visible = Camera:WorldToViewportPoint(pos)
+    return Vector2.new(p.X, p.Y), visible
 end
 
 
-local function createBoxESP(plr)
+-- ⭐ ฟังก์ชันเช็กว่าตอนนี้ tracerLine เล็งโดนใคร
+local function getPlayerAimed()
+    if not tracerLine then return nil end
+    if tracerLine.To == nil then return nil end
+
+    -- ยิง Ray จากกล้องไปตำแหน่งปลาย tracerLine
+    local origin = Camera.CFrame.Position
+    local direction = (Camera:ScreenPointToRay(tracerLine.To.X, tracerLine.To.Y).Direction * 5000)
+
+    local result = workspace:Raycast(origin, direction, RaycastParams.new())
+
+    if result and result.Instance then
+        local model = result.Instance:FindFirstAncestorOfClass("Model")
+        if model and Players:FindFirstChild(model.Name) then
+            return Players[model.Name]
+        end
+    end
+
+    return nil
+end
+
+
+
+local function createESP(plr)
     if espPlayers[plr] or plr == LocalPlayer then return end
 
     local lines = {}
     for i = 1, 12 do
-        local line = Drawing.new("Line")
-        line.Visible = false
-        line.Color = BOX_COLOR
-        line.Thickness = BOX_THICKNESS
-        lines[i] = line
+        local L = Drawing.new("Line")
+        L.Visible = false
+        L.Thickness = BOX_THICKNESS
+        lines[i] = L
     end
 
     local conn
     conn = RunService.RenderStepped:Connect(function()
+        if not ESPEnabledValue.Value then
+            for _, l in ipairs(lines) do l.Visible = false end
+            return
+        end
+
         if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
             for _, l in ipairs(lines) do l.Visible = false end
             return
         end
 
         local root = plr.Character.HumanoidRootPart
-        local rootPos = root.Position
-        local scale = root.Size.Y * SCALE_MULTIPLIER
+        local basePos = root.Position
+        local sizeY = root.Size.Y * SCALE
 
-        local corners = {
+        -- มุมกล่อง
+        local offsets = {
             Vector3.new(-1, 2, -1), Vector3.new(1, 2, -1),
-            Vector3.new(1, 2, 1),  Vector3.new(-1, 2, 1),
-
+            Vector3.new(1, 2, 1),   Vector3.new(-1, 2, 1),
             Vector3.new(-1, -2, -1), Vector3.new(1, -2, -1),
             Vector3.new(1, -2, 1),   Vector3.new(-1, -2, 1)
         }
 
-        local screenCorners = {}
-        local allVisible = true
+        local pts = {}
+        local visibleAll = true
 
-        for i, offset in ipairs(corners) do
-            local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
-            local screenPos, onScreen = worldToViewport(worldPos)
-            screenCorners[i] = screenPos
-            if not onScreen then allVisible = false end
+        for i, off in ipairs(offsets) do
+            local world = basePos + root.CFrame:VectorToWorldSpace(off * sizeY)
+            local screen, ok = toScreen(world)
+            pts[i] = screen
+            if not ok then visibleAll = false end
         end
 
-        if not allVisible then
+        if not visibleAll then
             for _, l in ipairs(lines) do l.Visible = false end
             return
         end
 
-        -- 🔥 เปลี่ยนสีเมื่อ tracerLine เล็งอยู่
-        local color = (CurrentTarget == plr)
-            and Color3.fromRGB(255, 0, 0)
-            or BOX_COLOR
+        -- ⭐ ตรวจสอบว่าตอนนี้เล็งผู้เล่นคนไหน
+        local aimedPlayer = getPlayerAimed()
 
-        local edges = {
+        -- ⭐ ถ้าเล็ง plr อยู่ → RED
+        local color = (aimedPlayer == plr) and RED or WHITE
+
+        local shape = {
             {1,2},{2,3},{3,4},{4,1},
             {5,6},{6,7},{7,8},{8,5},
             {1,5},{2,6},{3,7},{4,8}
         }
 
-        for i, edge in ipairs(edges) do
-            local l = lines[i]
-            l.From = screenCorners[edge[1]]
-            l.To   = screenCorners[edge[2]]
-            l.Color = color
-            l.Visible = true
+        for i, edge in ipairs(shape) do
+            local L = lines[i]
+            L.Color = color
+            L.From = pts[edge[1]]
+            L.To   = pts[edge[2]]
+            L.Visible = true
         end
     end)
 
@@ -130,51 +160,49 @@ local function createBoxESP(plr)
 end
 
 
-local function removeBoxESP(plr)
+
+local function removeESP(plr)
     if not espPlayers[plr] then return end
     espPlayers[plr].connection:Disconnect()
-    for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end
+    for _, l in ipairs(espPlayers[plr].lines) do l:Remove() end
     espPlayers[plr] = nil
 end
 
 
-local function enableAllESP()
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then createBoxESP(plr) end
+
+local function enableAll()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then createESP(p) end
     end
 end
 
-local function disableAllESP()
-    for plr, _ in pairs(espPlayers) do
-        removeBoxESP(plr)
+local function disableAll()
+    for p, _ in pairs(espPlayers) do
+        removeESP(p)
     end
 end
 
 
-Players.PlayerAdded:Connect(function(plr)
-    task.wait(1)
+Players.PlayerAdded:Connect(function(p)
     if ESPEnabledValue.Value then
-        createBoxESP(plr)
+        task.wait(1)
+        createESP(p)
     end
 end)
 
-Players.PlayerRemoving:Connect(removeBoxESP)
+Players.PlayerRemoving:Connect(removeESP)
 
 
--- WindUI Toggle
+
+-- UI Toggle แบบใช้ Value จริง
 EspTab:Toggle({
     Title = "ESP Box",
     Value = ESPEnabledValue.Value,
     Callback = function(state)
         ESPEnabledValue.Value = state
-        if state then
-            enableAllESP()
-        else
-            disableAllESP()
-        end
+        if state then enableAll() else disableAll() end
     end
 })
-
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
