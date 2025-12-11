@@ -427,65 +427,99 @@ EspTab:Toggle({
 })
 
 local ESPEnabledValue = Instance.new("BoolValue")
-ESPEnabledValue.Name = "ESPEnabled"
 ESPEnabledValue.Value = false
+ESPEnabledValue.Name = "ESPEnabled"
 ESPEnabledValue.Parent = LocalPlayer
 
--- ฟังก์ชันสร้าง Highlight
-local function CreateESP(player)
-    if not player.Character then return end
-    if player.Character:FindFirstChild("ESP_HIGHLIGHT") then return end
+local tracerLines = {} -- เก็บเส้น tracer ของแต่ละผู้เล่น
+local hue = 0
+local updateInterval = 1 -- วินาทีอัพเดท player list
 
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "ESP_HIGHLIGHT"
-    highlight.FillColor = Color3.fromRGB(180, 40, 255) -- ม่วง
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.FillTransparency = 0.2
-    highlight.OutlineTransparency = 0
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Parent = player.Character
-end
-
--- ลบ ESP
-local function RemoveESP(player)
-    if player.Character and player.Character:FindFirstChild("ESP_HIGHLIGHT") then
-        player.Character.ESP_HIGHLIGHT:Destroy()
-    end
-end
-
--- ฟังก์ชันอัปเดต ESP ทั้งหมด
-local function UpdateESP()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            if ESPEnabledValue.Value then
-                CreateESP(plr)
-            else
-                RemoveESP(plr)
+-- สร้างหรืออัพเดท tracer สำหรับผู้เล่น
+local function UpdateTracers()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            if not tracerLines[player] then
+                local line = Drawing.new("Line")
+                line.Thickness = 1
+                line.Transparency = 1
+                line.Color = Color3.fromHSV(hue,1,1)
+                line.Visible = ESPEnabledValue.Value
+                tracerLines[player] = line
             end
+        end
+    end
+
+    -- ลบผู้เล่นที่ออกจากเกม
+    for player, line in pairs(tracerLines) do
+        if not player.Parent or not player.Character then
+            line:Remove()
+            tracerLines[player] = nil
         end
     end
 end
 
--- RenderStepped อัปเดตทุกเฟรม
+-- ฟังก์ชันอัพเดทเส้น tracer ทุกเฟรม
 RunService.RenderStepped:Connect(function()
-    UpdateESP()
-end)
+    hue = (hue + 0.0001) % 1 -- เปลี่ยนสีรุ้งช้ามาก
 
--- เช็คผู้เล่นใหม่ทุก 3 วิ
-task.spawn(function()
-    while true do
-        task.wait(3)
-        UpdateESP()
+    if not ESPEnabledValue.Value then
+        for _, line in pairs(tracerLines) do
+            line.Visible = false
+        end
+        return
+    end
+
+    for player, line in pairs(tracerLines) do
+        if player.Character and player.Character:FindFirstChild("Head") then
+            local headPos = player.Character.Head.Position
+            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+            if onScreen then
+                line.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y) -- จุดเริ่มจากข้างล่างหน้าจอ
+                line.To = Vector2.new(screenPos.X, screenPos.Y)
+                line.Color = Color3.fromHSV(hue,1,1)
+                line.Visible = true
+            else
+                line.Visible = false
+            end
+        else
+            line.Visible = false
+        end
     end
 end)
 
--- WindUI ปุ่มเปิดปิด ESP
+-- อัพเดท list player ทุก 1 วินาที
+task.spawn(function()
+    while true do
+        task.wait(updateInterval)
+        UpdateTracers()
+    end
+end)
+
+-- อัพเดททันทีตอนผู้เล่นเข้ามา
+Players.PlayerAdded:Connect(function()
+    UpdateTracers()
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    if tracerLines[player] then
+        tracerLines[player]:Remove()
+        tracerLines[player] = nil
+    end
+end)
+
+-- เริ่มอัพเดทตอนเริ่มรัน
+UpdateTracers()
+
+-- WindUI ปุ่มเปิดปิด ESP Tracer
 EspTab:Toggle({
-    Title = "Highlight",
+    Title = "Tracer",
     Value = ESPEnabledValue.Value,
     Callback = function(state)
         ESPEnabledValue.Value = state
-        UpdateESP()
+       , for _, line in pairs(tracerLines) do
+            line.Visible = state
+        end
     end
 })
 
