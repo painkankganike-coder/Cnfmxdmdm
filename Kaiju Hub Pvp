@@ -185,6 +185,438 @@ EspTab:Toggle({
     end
 })
 
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContentProvider = game:GetService("ContentProvider")
+local LocalPlayer = Players.LocalPlayer
+
+local ItemESP_Enabled = false
+local BillboardCache = {}
+local ItemESP_UpdateConnections = {}
+local WeaponDB = {}
+local PreloadedImages = {}
+
+local RARITY_COLORS = {
+    ["Common"] = Color3.fromRGB(230, 224, 224),
+    ["Uncommon"] = Color3.fromRGB(200, 230, 200),
+    ["Rare"] = Color3.fromRGB(160, 200, 255),
+    ["Epic"] = Color3.fromRGB(200, 160, 255),
+    ["Legendary"] = Color3.fromRGB(255, 200, 120),
+    ["Omega"] = Color3.fromRGB(255, 120, 120),
+}
+
+-- ฟังก์ชันสร้าง key ของ Tool
+local function generateUniqueKey(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local itemId = tool:GetAttribute("ItemId") or tool:GetAttribute("Id") or tool:GetAttribute("WeaponId") or tool:GetAttribute("GunId")
+    if itemId and itemId ~= "" then
+        return "ITEMID_" .. tostring(itemId)
+    end
+
+    local partsData = {}
+    for _, part in ipairs(tool:GetDescendants()) do
+        if part:IsA("SpecialMesh") and part.MeshId and part.MeshId ~= "" then
+            table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureId or "NOTEX"))
+        elseif part:IsA("MeshPart") and part.MeshId and part.MeshId ~= "" then
+            table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureID or "NOTEX"))
+        elseif part:IsA("Decal") and part.Texture and part.Texture ~= "" then
+            table.insert(partsData, "DECAL_"..part.Texture)
+        end
+    end
+
+    if #partsData > 0 then
+        table.sort(partsData)
+        return "MESHKEY_" .. table.concat(partsData, ";")
+    end
+
+    local displayName = tool:GetAttribute("DisplayName") or tool.Name
+    local toolName = tool.Name
+    local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
+    local imageId = tool:GetAttribute("ImageId") or "NOIMAGE"
+    return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
+end
+
+-- ลงทะเบียน Tool ทั้งหมด
+local function registerItems(folder)
+    for _, tool in ipairs(folder:GetDescendants()) do
+        if not tool:IsA("Tool") then continue end
+        local key = generateUniqueKey(tool)
+        if not key then continue end
+
+        local displayName = tool:GetAttribute("DisplayName") or tool.Name
+        local imageId = tool:GetAttribute("ImageId") or "rbxassetid://7072725737"
+        local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
+
+        WeaponDB[key] = {
+            Name = displayName,
+            Rarity = rarity,
+            ImageId = imageId,
+            ToolName = tool.Name,
+            Key = key
+        }
+
+        if imageId and imageId ~= "" and not PreloadedImages[imageId] then
+            PreloadedImages[imageId] = true
+            task.spawn(function()
+                pcall(function()
+                    ContentProvider:PreloadAsync({imageId})
+                end)
+            end)
+        end
+    end
+end
+
+pcall(function()
+    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 5)
+    if itemsFolder then registerItems(itemsFolder) end
+    for _, obj in ipairs(ReplicatedStorage:GetChildren()) do
+        if obj:IsA("Folder") and (obj.Name:find("Weapon") or obj.Name:find("Item") or obj.Name:find("Tool")) then
+            registerItems(obj)
+        end
+    end
+    registerItems(game:GetService("StarterPack"))
+end)
+
+local function getWeaponInfo(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local key = generateUniqueKey(tool)
+    return WeaponDB[key]
+end
+
+-- สร้าง Billboard สำหรับผู้เล่น
+local function createBillboardForPlayer(player)
+    if player == LocalPlayer then return end
+
+    local function updateESP()
+        if not ItemESP_Enabled or not player.Character then return end
+
+        local currentTools = {}
+        local function scan(folder)
+            if not folder then return end
+            for _, tool in ipairs(folder:GetChildren()) do
+                if tool:IsA("Tool") and tool.Name ~= "Fists" then
+                    local info = getWeaponInfo(tool)
+                    if info then
+                        table.insert(currentTools, info)
+                    end
+                end
+            end
+        end
+
+        scan(player.Character)
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then scan(backpack) end
+
+        -- ถ้า Billboard หายหรือยังไม่มี สร้างใหม่
+        if not BillboardCache[player] or not BillboardCache[player].Parent then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "ItemESP"
+            billboard.Adornee = hrp
+            billboard.Size = UDim2.new(0, 280, 0, 40)
+            billboard.StudsOffset = Vector3.new(0, -6.5, 0)
+            billboard.AlwaysOnTop = true
+            billboard.LightInfluence = 0
+            billboard.Parent = hrp
+
+            local container = Instance.new("Frame", billboard)
+            container.Size = UDim2.new(1,0,1,0)
+            container.BackgroundTransparency = 1
+
+            BillboardCache[player] = billboard
+        end
+
+        -- อัปเดต Tool ภายใน Billboard
+        local container = BillboardCache[player]:FindFirstChildOfClass("Frame")
+        if container then
+            container:ClearAllChildren()
+            local layout = Instance.new("UIGridLayout")
+            layout.CellSize = UDim2.new(0,35,0,35)
+            layout.CellPadding = UDim2.new(0,6,0,0)
+            layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+            layout.VerticalAlignment = Enum.VerticalAlignment.Center
+            layout.SortOrder = Enum.SortOrder.LayoutOrder
+            layout.Parent = container
+
+            for i, info in ipairs(currentTools) do
+                local img = Instance.new("ImageLabel")
+                img.Parent = container
+                img.Size = UDim2.new(0,35,0,35)
+                img.BackgroundTransparency = 1
+                img.Image = info.ImageId or "rbxassetid://7072725737"
+                img.ScaleType = Enum.ScaleType.Fit
+                img.LayoutOrder = i
+                local color = RARITY_COLORS[info.Rarity] or Color3.fromRGB(255,255,255)
+                img.ImageColor3 = color:Lerp(Color3.new(1,1,1),0.35)
+            end
+        end
+    end
+
+    -- อัปเดตทันทีทุก 1 วินาที
+    task.spawn(function()
+        while ItemESP_Enabled and player.Parent do
+            pcall(updateESP)
+            task.wait(1)
+        end
+    end)
+
+    -- เก็บ connection
+    ItemESP_UpdateConnections[player] = {}
+    if player.Character then
+        table.insert(ItemESP_UpdateConnections[player], player.Character.ChildAdded:Connect(function()
+            if ItemESP_Enabled then task.defer(updateESP) end
+        end))
+        table.insert(ItemESP_UpdateConnections[player], player.Character.ChildRemoved:Connect(function()
+            if ItemESP_Enabled then task.defer(updateESP) end
+        end))
+    end
+end
+
+-- ฟังก์ชันอัปเดตทุกคน (สร้าง Billboard ใหม่ถ้าหาย)
+local function UpdateAllItemESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local hasBillboard = BillboardCache[player] and BillboardCache[player].Parent
+            if ItemESP_Enabled and (not hasBillboard) then
+                createBillboardForPlayer(player)
+            end
+        end
+    end
+end
+
+-- Loop อัปเดตทุก 1 วินาที
+task.spawn(function()
+    while true do
+        task.wait(1)
+        UpdateAllItemESP()
+    end
+end)
+
+-- Loop สร้าง/รีเฟรช Billboard ใหม่ทุก 20 วินาที
+task.spawn(function()
+    while true do
+        task.wait(20)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and ItemESP_Enabled then
+                if BillboardCache[player] and BillboardCache[player].Parent then
+                    BillboardCache[player]:Destroy()
+                    BillboardCache[player] = nil
+                end
+                createBillboardForPlayer(player)
+            end
+        end
+    end
+end)
+
+-- Player Added/Removed
+Players.PlayerAdded:Connect(function(p)
+    if p ~= LocalPlayer and ItemESP_Enabled then
+        task.wait(0.1)
+        createBillboardForPlayer(p)
+    end
+end)
+Players.PlayerRemoving:Connect(function(p)
+    if BillboardCache[p] then
+        BillboardCache[p]:Destroy()
+        BillboardCache[p] = nil
+    end
+    if ItemESP_UpdateConnections[p] then
+        for _, conn in pairs(ItemESP_UpdateConnections[p]) do
+            if conn.Connected then conn:Disconnect() end
+        end
+        ItemESP_UpdateConnections[p] = nil
+    end
+end)
+
+-- WindUI Toggle (สมมติว่า EspTab มีอยู่แล้ว)
+EspTab:Toggle({
+    Title = "Item",
+    Icon = "circle-check",
+    Value = ItemESP_Enabled,
+    Callback = function(state)
+        ItemESP_Enabled = state
+        if state then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    createBillboardForPlayer(p)
+                end
+            end
+        else
+            for p, billboard in pairs(BillboardCache) do
+                if billboard then billboard:Destroy() end
+            end
+            BillboardCache = {}
+            for player, conns in pairs(ItemESP_UpdateConnections) do
+                for _, conn in pairs(conns) do
+                    if conn.Connected then conn:Disconnect() end
+                end
+                ItemESP_UpdateConnections[player] = nil
+            end
+        end
+    end
+})
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+local ItemESP_Enabled = false  -- ตัวแปรเปิดปิด ESP
+local ESP_Items = {}  -- เก็บ Highlight + Drawing ของแต่ละไอเทม
+
+-- สีม่วงสว่างแบบเท่ ๆ
+local HIGHLIGHT_COLOR = Color3.fromRGB(200, 0, 255)
+local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
+
+-- โฟลเดอร์ของตก (รองรับทั้ง DroppedItem และ DroppedItems)
+local droppedFolder = Workspace:FindFirstChild("DroppedItem") or Workspace:FindFirstChild("DroppedItems")
+if not droppedFolder then
+    warn("ไม่พบโฟลเดอร์ DroppedItem / DroppedItems")
+    return
+end
+
+-- ฟังก์ชันสร้าง ESP ให้ไอเทม 1 ชิ้น
+local function createItemESP(item)
+    if not ItemESP_Enabled then return end
+    if ESP_Items[item] then return end  -- ถ้ามีแล้วไม่ทำซ้ำ
+    if item.Name == "Money" then return end  -- ยกเว้น Money
+    if not item:FindFirstChild("Handle") and not item.PrimaryPart then return end
+
+    local handle = item:FindFirstChild("Handle") or item.PrimaryPart
+
+    -- Highlight สีม่วงสว่าง
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = HIGHLIGHT_COLOR
+    highlight.OutlineColor = HIGHLIGHT_COLOR
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = item
+
+    -- ชื่อไอเทม (Drawing Text)
+    local nameText = Drawing.new("Text")
+    nameText.Size = 16
+    nameText.Color = TEXT_COLOR
+    nameText.Center = true
+    nameText.Outline = true
+    nameText.Font = 2
+    nameText.Visible = true
+    nameText.Text = item.Name
+
+    -- ระยะทาง (Drawing Text)
+    local distanceText = Drawing.new("Text")
+    distanceText.Size = 10
+    distanceText.Color = TEXT_COLOR
+    distanceText.Center = true
+    distanceText.Outline = true
+    distanceText.Font = 2
+    distanceText.Visible = true
+
+    -- เก็บไว้ในตาราง
+    ESP_Items[item] = {
+        highlight = highlight,
+        name = nameText,
+        distance = distanceText,
+        handle = handle
+    }
+
+    -- ลบเมื่อไอเทมหาย
+    item.AncestryChanged:Connect(function()
+        if not item.Parent then
+            if ESP_Items[item] then
+                highlight:Destroy()
+                nameText:Remove()
+                distanceText:Remove()
+                ESP_Items[item] = nil
+            end
+        end
+    end)
+end
+
+-- ฟังก์ชันเปิด ESP
+local function enableItemESP()
+    ItemESP_Enabled = true
+    -- สแกนของเดิม
+    for _, item in pairs(droppedFolder:GetChildren()) do
+        if item:IsA("Model") or item:IsA("Tool") or item:IsA("Folder") then
+            task.spawn(function()
+                task.wait(0.3)
+                createItemESP(item)
+            end)
+        end
+    end
+end
+
+-- ฟังก์ชันปิด ESP
+local function disableItemESP()
+    ItemESP_Enabled = false
+    for item, data in pairs(ESP_Items) do
+        if data.highlight then data.highlight:Destroy() end
+        if data.name then data.name:Remove() end
+        if data.distance then data.distance:Remove() end
+    end
+    ESP_Items = {}
+end
+
+-- อัปเดตตำแหน่งชื่อ + ระยะทางทุกเฟรม
+RunService.Heartbeat:Connect(function()
+    if not ItemESP_Enabled then return end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local rootPos = player.Character.HumanoidRootPart.Position
+
+    for item, data in pairs(ESP_Items) do
+        if item and item.Parent and data.handle and data.handle.Parent then
+            local worldPos = data.handle.Position + Vector3.new(0, 2, 0)
+            local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
+
+            if onScreen then
+                local screen2D = Vector2.new(screenPos.X, screenPos.Y)
+                local distance = math.floor((rootPos - data.handle.Position).Magnitude)
+
+                data.name.Position = screen2D
+                data.name.Visible = true
+
+                data.distance.Position = screen2D + Vector2.new(0, 18)
+                data.distance.Text = distance .. "m"
+                data.distance.Visible = true
+            else
+                data.name.Visible = false
+                data.distance.Visible = false
+            end
+        else
+            -- ลบถ้าไอเทมหาย
+            if data.highlight then data.highlight:Destroy() end
+            if data.name then data.name:Remove() end
+            if data.distance then data.distance:Remove() end
+            ESP_Items[item] = nil
+        end
+    end
+end)
+
+-- เมื่อมีของตกใหม่
+droppedFolder.ChildAdded:Connect(function(item)
+    task.wait(0.5)
+    createItemESP(item)
+end)
+
+-- ตัวอย่าง WindUI Toggle
+EspTab:Toggle({
+    Title = "Dropped Items",
+    Value = ItemESP_Enabled,
+    Callback = function(state)
+        if state then
+            enableItemESP()
+        else
+            disableItemESP()
+        end
+    end
+})
+
 -- อัปเดต CurrentTarget ตาม tracerLine ทุก frame และซิงค์ ESP แบบ realtime
 RunService.RenderStepped:Connect(function()
     -- ใช้ target ของ tracerLine / Silent Aim
