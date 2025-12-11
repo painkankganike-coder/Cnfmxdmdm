@@ -42,83 +42,61 @@ local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
-
-Players.PlayerAdded:Connect(function(p)
-    if ESPEnabledValue.Value then
-        task.wait(1)
-        createESP(p)
-    end
-end)
-
-Players.PlayerRemoving:Connect(removeESP)
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-
-local BOX_COLOR = Color3.fromRGB(255, 255, 255)
-local TARGET_COLOR = Color3.fromRGB(255, 0, 0)
+local BOX_COLOR = Color3.fromRGB(255,255,255)
+local TARGET_COLOR = Color3.fromRGB(255,0,0)
 
 local espPlayers = {}
 
--- แปลงตำแหน่ง World → Screen
-local function toScreen(pos)
-    local p, on = Camera:WorldToViewportPoint(pos)
-    return Vector2.new(p.X, p.Y), on
+local function worldToScreen(pos)
+    local p, onScreen = Camera:WorldToViewportPoint(pos)
+    return Vector2.new(p.X, p.Y), onScreen
 end
 
--- สร้าง ESP Box ให้ Player
 local function createBox(plr)
     if plr == LocalPlayer or espPlayers[plr] then return end
 
-    local box = {}
-    box.lines = {}
-
+    local lines = {}
     for i = 1, 12 do
-        local ln = Drawing.new("Line")
-        ln.Thickness = 2
-        ln.Color = BOX_COLOR
-        ln.Visible = false
-        box.lines[i] = ln
+        local line = Drawing.new("Line")
+        line.Thickness = 2
+        line.Color = BOX_COLOR
+        line.Visible = false
+        lines[i] = line
     end
 
-    box.conn = RunService.RenderStepped:Connect(function()
-        local char = plr.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-
-        if not hrp then
-            for _, L in ipairs(box.lines) do L.Visible = false end
+    local conn
+    conn = RunService.RenderStepped:Connect(function()
+        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
+            for _, l in ipairs(lines) do l.Visible = false end
             return
         end
 
-        -- กำหนดสี่มุมกล่อง
-        local size = Vector3.new(2, 4, 2)
-        local corners = {
-            Vector3.new(-1, 2, -1), Vector3.new(1, 2, -1),
-            Vector3.new(1, 2, 1),  Vector3.new(-1, 2, 1),
+        local root = plr.Character.HumanoidRootPart
+        local rootPos = root.Position
+        local scale = root.Size.Y
 
-            Vector3.new(-1, -2, -1), Vector3.new(1, -2, -1),
-            Vector3.new(1, -2, 1),  Vector3.new(-1, -2, 1)
+        local corners = {
+            Vector3.new(-1,  2, -1), Vector3.new( 1,  2, -1), Vector3.new( 1,  2,  1), Vector3.new(-1,  2,  1),
+            Vector3.new(-1, -2, -1), Vector3.new( 1, -2, -1), Vector3.new( 1, -2,  1), Vector3.new(-1, -2,  1)
         }
 
-        local screenPts = {}
-        local allVisible = true
+        local screen = {}
+        local visible = true
 
-        for i, off in ipairs(corners) do
-            local world = hrp.Position + hrp.CFrame:VectorToWorldSpace(off * 2)
-            local screen, onScreen = toScreen(world)
-            screenPts[i] = screen
-            if not onScreen then allVisible = false end
+        for i, offset in ipairs(corners) do
+            local world = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
+            local s, onScreen = worldToScreen(world)
+            screen[i] = s
+            visible = visible and onScreen
         end
 
-        if not allVisible then
-            for _, L in ipairs(box.lines) do L.Visible = false end
+        if not visible then
+            for _, l in ipairs(lines) do l.Visible = false end
             return
         end
 
-        -- ⭐ ใช้ CurrentTarget จาก Silent Aim
-        local useColor = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
+        -- ถ้าเป็นเป้าหมาย Silent Aim → สีแดง
+        local color = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
 
         local edges = {
             {1,2},{2,3},{3,4},{4,1},
@@ -127,53 +105,54 @@ local function createBox(plr)
         }
 
         for i, e in ipairs(edges) do
-            local L = box.lines[i]
-            L.From = screenPts[e[1]]
-            L.To   = screenPts[e[2]]
-            L.Color = useColor
-            L.Visible = true
+            local l = lines[i]
+            l.From = screen[e[1]]
+            l.To = screen[e[2]]
+            l.Color = color
+            l.Visible = true
         end
     end)
 
-    espPlayers[plr] = box
+    espPlayers[plr] = {connection = conn, lines = lines}
 end
 
--- ลบของ player นั้น
 local function removeBox(plr)
     if not espPlayers[plr] then return end
-    local box = espPlayers[plr]
-
-    if box.conn then box.conn:Disconnect() end
-    for _, L in ipairs(box.lines) do L:Remove() end
-
+    espPlayers[plr].connection:Disconnect()
+    for _, l in ipairs(espPlayers[plr].lines) do l:Remove() end
     espPlayers[plr] = nil
 end
 
--- เปิด ESP ทั้งหมด
-function EnableESPBox()
+local function enableESP()
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            createBox(plr)
-        end
+        if plr ~= LocalPlayer then createBox(plr) end
     end
 end
 
--- ปิด ESP ทั้งหมด
-function DisableESPBox()
+local function disableESP()
     for plr, _ in pairs(espPlayers) do
         removeBox(plr)
     end
 end
 
--- Auto add/remove
 Players.PlayerAdded:Connect(function(plr)
     task.wait(1)
-    if _G.ESPEnabled then
+    if ESPEnabledValue and ESPEnabledValue.Value then
         createBox(plr)
     end
 end)
 
 Players.PlayerRemoving:Connect(removeBox)
+
+-- UI Toggle
+EspTab:Toggle({
+    Title = "Box ESP",
+    Value = ESPEnabledValue.Value,
+    Callback = function(v)
+        ESPEnabledValue.Value = v
+        if v then enableESP() else disableESP() end
+    end
+})
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
