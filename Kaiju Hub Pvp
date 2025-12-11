@@ -1282,6 +1282,7 @@ WeaponTab:Toggle({
     end
 })
 
+
 local SilentAimEnabledValue = Instance.new("BoolValue")
 SilentAimEnabledValue.Name = "SilentAimEnabled"
 SilentAimEnabledValue.Value = false
@@ -1312,15 +1313,21 @@ AttackAntiLockEnabledValue.Name = "AttackAntiLockEnabled"
 AttackAntiLockEnabledValue.Value = false
 AttackAntiLockEnabledValue.Parent = LocalPlayer
 
+local AttackAntiKillEnabledValue = Instance.new("BoolValue")
+AttackAntiKillEnabledValue.Name = "AttackAntiKillEnabled"
+AttackAntiKillEnabledValue.Value = false
+AttackAntiKillEnabledValue.Parent = LocalPlayer
+
 local IgnorePlayers = {}
 local CurrentTarget, head, aimPos
 local hue = 0
-local lastPositions = {}
 
+-- ปืนที่รองรับ
 local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
 local GunLookup = {}
 for _, name in pairs(GunNames) do GunLookup[name] = true end
 
+-- FOV Circle
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1
 fovCircle.NumSides = 100
@@ -1329,60 +1336,66 @@ fovCircle.Filled = false
 fovCircle.Visible = SilentAimEnabledValue.Value
 fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 
+-- Tracer
 local tracerLine = Drawing.new("Line")
 tracerLine.Thickness = 1
 tracerLine.Visible = false
 
+-- ====================
+-- คาดเดาตำแหน่ง
+-- ====================
 local PREDICTION_FACTOR = 0.165
-local PREDICTION_DISTANCE = 6
 
 local function PredictPosition(headPart)
     local root = headPart.Parent:FindFirstChild("HumanoidRootPart")
     if not root then return headPart.Position end
+
     local velocity = root.Velocity
     local prediction = headPart.Position + (velocity * PREDICTION_FACTOR)
+
+    -- รองรับรถ (เพิ่ม Velocity รถ x1.2)
     local seat = root:FindFirstChildWhichIsA("WeldConstraint") or root:FindFirstChildWhichIsA("Weld")
     if seat and seat.Part0 then
         prediction = headPart.Position + (seat.Part0.Velocity * PREDICTION_FACTOR * 1.2)
     end
+
     return prediction
 end
 
+-- AntiLockPrediction + Attack Anti Kill
 local function AntiLockPrediction(part)
     if not part or not part.Parent then return part.Position end
     local root = part.Parent:FindFirstChild("HumanoidRootPart")
     local humanoid = part.Parent:FindFirstChild("Humanoid")
-    if not humanoid or not root then return part.Position end
+    if not humanoid then return part.Position end
 
     local headPos = part.Position + Vector3.new(0, (part:IsA("BasePart") and part.Size.Y or 1)/2, 0)
 
+    -- ถ้าเปิด Attack Anti Kill คืนตำแหน่งตรง ๆ
+    if AttackAntiKillEnabledValue.Value then
+        return headPos
+    end
+
     if AttackAntiLockEnabledValue.Value then
-        local velocity = root.Velocity
-        local speed = velocity.Magnitude
-
-        if speed >= 14 then
-            local direction = velocity.Unit
-            return headPos + direction * PREDICTION_DISTANCE
+        local speed = root and root.Velocity.Magnitude or 0
+        local factor = (speed >= 14) and 6 or 0
+        -- ตรวจจับทิศทางเดินแบบสี่มุม (x,z)
+        local vel = root.Velocity
+        local x = vel.X
+        local z = vel.Z
+        local dir = Vector3.new(0,0,0)
+        if math.abs(x) > math.abs(z) then
+            dir = Vector3.new((x>0 and 1 or -1)*factor,0,0)
         else
-            -- ตรวจจับซ้ายขวาหน้า หลัง
-            local lastPos = lastPositions[part.Parent] or root.Position
-            local movement = root.Position - lastPos
-            lastPositions[part.Parent] = root.Position
-
-            local direction = Vector3.new(0,0,0)
-            if movement.Magnitude > 0.05 then
-                direction = movement.Unit
-            else
-                direction = part.CFrame.LookVector
-            end
-
-            return headPos + direction * PREDICTION_DISTANCE
+            dir = Vector3.new(0,0,(z>0 and 1 or -1)*factor)
         end
+        return headPos + dir
     else
         return PredictPosition(part)
     end
 end
 
+-- ฟังก์ชัน Ignore
 local function IsIgnored(plr)
     for _, name in ipairs(IgnorePlayers) do
         if string.lower(plr.Name) == string.lower(name) then
@@ -1392,6 +1405,7 @@ local function IsIgnored(plr)
     return false
 end
 
+-- หาเป้าหมายใกล้ FOV
 local function GetClosestTarget()
     local closest
     local shortest = math.huge
@@ -1416,6 +1430,7 @@ local function GetClosestTarget()
     return closest
 end
 
+-- เช็คว่าถือปืน
 local function IsHoldingAllowedGun(args)
     local ok, weapon = pcall(function() return args[3] end)
     if ok and typeof(weapon) == "Instance" and GunLookup[weapon.Name] then return true end
@@ -1427,6 +1442,7 @@ local function IsHoldingAllowedGun(args)
     return false
 end
 
+-- ตรวจกำแพง
 local function IsBehindWall(targetHead)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return false end
     local origin = LocalPlayer.Character.Head.Position
@@ -1438,6 +1454,7 @@ local function IsBehindWall(targetHead)
     return result and result.Instance and not result.Instance:IsDescendantOf(targetHead.Parent)
 end
 
+-- Hook ยิง
 local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
 local oldFire
 oldFire = hookfunction(send.FireServer, function(self, ...)
@@ -1464,7 +1481,7 @@ oldFire = hookfunction(send.FireServer, function(self, ...)
             beam.Anchored = true
             beam.CanCollide = false
             beam.Material = Enum.Material.Neon
-            beam.Size = Vector3.new(0.05,0.05,distance)
+            beam.Size = Vector3.new(0.15,0.15,distance)
             beam.CFrame = CFrame.new(ourHead.Position, aimPos) * CFrame.new(0,0,-distance/2)
             beam.Color = Color3.fromHSV(math.random(),1,1)
             game:GetService("Debris"):AddItem(beam, 1)
@@ -1473,6 +1490,7 @@ oldFire = hookfunction(send.FireServer, function(self, ...)
     return oldFire(self, unpack(args))
 end)
 
+-- Render FOV + Tracer
 RunService.RenderStepped:Connect(function()
     fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     fovCircle.Radius = FOVRadiusValue.Value
@@ -1504,6 +1522,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- UI Controls
 CombatTab:Toggle({
     Title = "Silent Aim",
     Value = SilentAimEnabledValue.Value,
@@ -1519,6 +1538,19 @@ CombatTab:Toggle({
     Value = AttackAntiLockEnabledValue.Value,
     Callback = function(state)
         AttackAntiLockEnabledValue.Value = state
+    end
+})
+
+CombatTab:Toggle({
+    Title = "Attack Anti Kill",
+    Value = AttackAntiKillEnabledValue.Value,
+    Callback = function(state)
+        AttackAntiKillEnabledValue.Value = state
+        if state then
+            print("✅ Attack Anti Kill: ON (Prediction Disabled)")
+        else
+            print("❌ Attack Anti Kill: OFF (Prediction Enabled)")
+        end
     end
 })
 
@@ -1551,19 +1583,42 @@ CombatTab:Toggle({
     Callback = function(state) MagicBulletValue.Value = state end
 })
 
-CombatTab:Input({
-    Title = "Safe Players",
-    Placeholder = "ใส่ชื่อเพื่อนที่ไม่ล็อค, คั่นด้วย ,",
-    InputIcon = "shield-check",
-    Callback = function(txt)
-        IgnorePlayers = {}
-        for inputName in string.gmatch(txt, '([^,]+)') do
-            inputName = inputName:match("^%s*(.-)%s*$")
-            table.insert(IgnorePlayers, inputName)
+-- Safe Players Multi Dropdown + Refresh
+local function UpdatePlayerNames()
+    local names = {}
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            table.insert(names, plr.Name)
         end
+    end
+    return names
+end
+
+CombatTab:Space()
+
+local safePlayersDropdown = CombatTab:Dropdown({
+    Title = "Safe Players",
+    Multi = true,
+    AllowNone = true,
+    Values = UpdatePlayerNames(),
+    Value = {},
+    Callback = function(selected)
+        IgnorePlayers = {}
+        for _, name in ipairs(selected) do
+            table.insert(IgnorePlayers, name)
+        end
+        print("Safe Players Updated: " .. table.concat(IgnorePlayers, ", "))
     end
 })
 
+CombatTab:Button({
+    Title = "Refresh Player List",
+    Callback = function()
+        local newValues = UpdatePlayerNames()
+        safePlayersDropdown:SetValues(newValues)
+        print("✅ Player list refreshed")
+    end
+})
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
