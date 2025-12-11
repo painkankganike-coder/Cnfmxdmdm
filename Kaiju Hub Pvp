@@ -427,6 +427,12 @@ EspTab:Toggle({
 })
 
 local ESPEnabledValue = Instance.new("BoolValue")
+-- สร้างแท็บ ESP
+local EspTab = Window:Tab({Title = "ESP", Icon = "eye"})
+EspTab:Section({Title = "PLAYER ESP"})
+
+-- ตัวแปรเปิด/ปิด ESP
+local ESPEnabledValue = Instance.new("BoolValue")
 ESPEnabledValue.Name = "ESPEnabled"
 ESPEnabledValue.Value = false
 ESPEnabledValue.Parent = LocalPlayer
@@ -438,7 +444,7 @@ local function CreateESP(player)
 
     local highlight = Instance.new("Highlight")
     highlight.Name = "ESP_HIGHLIGHT"
-    highlight.FillColor = Color3.fromRGB(180, 40, 255) -- ม่วงทึบ
+    highlight.FillColor = Color3.fromRGB(180, 40, 255) -- ม่วง
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.FillTransparency = 0.2
     highlight.OutlineTransparency = 0
@@ -446,65 +452,46 @@ local function CreateESP(player)
     highlight.Parent = player.Character
 end
 
--- ลบ ESP ถ้าปิด
+-- ลบ ESP
 local function RemoveESP(player)
     if player.Character and player.Character:FindFirstChild("ESP_HIGHLIGHT") then
         player.Character.ESP_HIGHLIGHT:Destroy()
     end
 end
 
--- อัปเดต ESP ทุกเฟรม
-RunService.RenderStepped:Connect(function()
-    if not ESPEnabledValue.Value then
-        -- ปิด ESP ลบทุกคนออก
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer then
+-- ฟังก์ชันอัปเดต ESP ทั้งหมด
+local function UpdateESP()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            if ESPEnabledValue.Value then
+                CreateESP(plr)
+            else
                 RemoveESP(plr)
             end
         end
-        return
     end
+end
 
-    -- เปิด ESP → เพิ่ม highlight ทุกคน
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            if plr.Character then
-                CreateESP(plr)
-            end
-        end
-    end
+-- RenderStepped อัปเดตทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    UpdateESP()
 end)
 
--- อัปเดตชื่อผู้เล่นทุก 60 วิ
+-- เช็คผู้เล่นใหม่ทุก 3 วิ
 task.spawn(function()
     while true do
         task.wait(3)
-
-        if ESPEnabledValue.Value then
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer then
-                    CreateESP(plr)
-                end
-            end
-        end
+        UpdateESP()
     end
 end)
 
--- WindUI ปุ่มเปิดปิด
+-- WindUI ปุ่มเปิดปิด ESP
 EspTab:Toggle({
     Title = "Highlight",
     Value = ESPEnabledValue.Value,
     Callback = function(state)
         ESPEnabledValue.Value = state
-        
-        if not state then
-            -- ปิด ESP → ลบทั้งหมด
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer then
-                    RemoveESP(plr)
-                end
-            end
-        end
+        UpdateESP()
     end
 })
 
