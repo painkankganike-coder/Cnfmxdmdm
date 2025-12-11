@@ -427,12 +427,6 @@ EspTab:Toggle({
 })
 
 local ESPEnabledValue = Instance.new("BoolValue")
--- สร้างแท็บ ESP
-local EspTab = Window:Tab({Title = "ESP", Icon = "eye"})
-EspTab:Section({Title = "PLAYER ESP"})
-
--- ตัวแปรเปิด/ปิด ESP
-local ESPEnabledValue = Instance.new("BoolValue")
 ESPEnabledValue.Name = "ESPEnabled"
 ESPEnabledValue.Value = false
 ESPEnabledValue.Parent = LocalPlayer
