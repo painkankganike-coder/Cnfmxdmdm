@@ -48,11 +48,13 @@ local SCALE_MULTIPLIER = 1
 
 local espPlayers = {}
 
+-- แปลงตำแหน่งโลกเป็นหน้าจอ
 local function worldToViewport(pos)
     local screen, onScreen = camera:WorldToViewportPoint(pos)
     return Vector2.new(screen.X, screen.Y), onScreen
 end
 
+-- สร้าง Box ESP
 local function createBoxESP(plr, getCurrentTargetFunc)
     if espPlayers[plr] or plr == LocalPlayer then return end
 
@@ -96,7 +98,7 @@ local function createBoxESP(plr, getCurrentTargetFunc)
             return
         end
 
-        -- เช็ค TracerLine ของจริง ทุกเฟรม
+        -- เช็ค CurrentTarget จาก callback
         local currentTarget = getCurrentTargetFunc()
         local color = (currentTarget == plr) and Color3.fromRGB(255, 0, 0) or BOX_COLOR
 
@@ -138,12 +140,16 @@ local function disableAllESP()
     end
 end
 
+-- Player Added/Removing
 Players.PlayerAdded:Connect(function(plr)
     task.wait(1)
-    if _G.ESPEnabled then createBoxESP(plr, function() return _G.CurrentTarget end) end
+    if _G.ESPEnabled then
+        createBoxESP(plr, function() return CurrentTarget end) -- ใช้ CurrentTarget ของ TracerLine
+    end
 end)
 Players.PlayerRemoving:Connect(removeBoxESP)
 
+-- ตัวอย่าง Toggle WindUI
 EspTab:Toggle({
     Title = "Box",
     Icon = "eye",
@@ -151,11 +157,9 @@ EspTab:Toggle({
     Callback = function(state)
         _G.ESPEnabled = state
         if state then
-            enableAllESP(function() return _G.CurrentTarget end)
-            print("✅ ESP Box: ON")
+            enableAllESP(function() return CurrentTarget end) -- callback ให้เช็ค TracerLine ทุกเฟรม
         else
             disableAllESP()
-            print("❌ ESP Box: OFF")
         end
     end
 })
