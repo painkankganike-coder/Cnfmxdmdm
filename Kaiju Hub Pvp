@@ -100,8 +100,9 @@ local function createBoxESP(plr, getCurrentTarget)
             return
         end
 
-        -- เปลี่ยนสีเป็นแดงทันทีถ้า CurrentTarget เล็งผู้เล่นนี้
-        local color = (getCurrentTarget() == plr) and Color3.fromRGB(255,0,0) or BOX_COLOR
+        -- เปลี่ยนสีเป็นแดงถ้า TracerLine กำลังเล็งผู้เล่นนี้
+        local currentTarget = getCurrentTarget() -- ตัวนี้ต้องส่งมาจากโค้ด TracerLine ของคุณ
+        local color = (currentTarget == plr) and Color3.fromRGB(255,0,0) or BOX_COLOR
 
         local edges = {
             {1,2},{2,3},{3,4},{4,1},
