@@ -39,57 +39,43 @@ ServerTab:Section({Title="Server Hop  :"})
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
+local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
 
--- Config
-local BOX_COLOR_DEFAULT = Color3.fromRGB(255, 255, 255)
-local BOX_COLOR_LOCKED = Color3.fromRGB(255, 0, 0)
+local ESPEnabledValue = Instance.new("BoolValue")
+ESPEnabledValue.Name = "ESPBoxEnabled"
+ESPEnabledValue.Value = false
+ESPEnabledValue.Parent = LocalPlayer
+
+local espPlayers = {}
+
+local BOX_COLOR = Color3.fromRGB(255, 255, 255)
 local BOX_THICKNESS = 2
 local SCALE_MULTIPLIER = 1
 
--- Table เก็บ ESP แต่ละคน
-local espPlayers = {}
 
--- ตัวแปร CurrentTarget (ตาม tracerLine)
-local CurrentTarget = nil
-
--- แปลงตำแหน่งโลกเป็นหน้าจอ
 local function worldToViewport(pos)
     local screen, onScreen = Camera:WorldToViewportPoint(pos)
     return Vector2.new(screen.X, screen.Y), onScreen
 end
 
--- สร้างเส้น Box ESP
-local function createLines(color)
-    local lines = {}
-    for i=1,12 do
-        local line = Drawing.new("Line")
-        line.Visible = false
-        line.Color = color
-        line.Thickness = BOX_THICKNESS
-        line.Transparency = 1
-        lines[i] = line
-    end
-    return lines
-end
 
--- สร้าง ESP สำหรับผู้เล่น
 local function createBoxESP(plr)
     if espPlayers[plr] or plr == LocalPlayer then return end
 
-    local lines = createLines(BOX_COLOR_DEFAULT)
-    local connection
-    connection = RunService.RenderStepped:Connect(function()
-        if not _G.ESPEnabled then
-            for _, line in ipairs(lines) do line.Visible = false end
-            return
-        end
+    local lines = {}
+    for i = 1, 12 do
+        local line = Drawing.new("Line")
+        line.Visible = false
+        line.Color = BOX_COLOR
+        line.Thickness = BOX_THICKNESS
+        lines[i] = line
+    end
 
-        -- ตรวจสอบ Character/HumanoidRootPart
+    local conn
+    conn = RunService.RenderStepped:Connect(function()
         if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
-            for _, line in ipairs(lines) do line.Visible = false end
+            for _, l in ipairs(lines) do l.Visible = false end
             return
         end
 
@@ -98,85 +84,89 @@ local function createBoxESP(plr)
         local scale = root.Size.Y * SCALE_MULTIPLIER
 
         local corners = {
-            Vector3.new(-1,  2, -1), Vector3.new( 1,  2, -1), Vector3.new( 1,  2,  1), Vector3.new(-1,  2,  1),
-            Vector3.new(-1, -2, -1), Vector3.new( 1, -2, -1), Vector3.new( 1, -2,  1), Vector3.new(-1, -2,  1)
+            Vector3.new(-1, 2, -1), Vector3.new(1, 2, -1),
+            Vector3.new(1, 2, 1),  Vector3.new(-1, 2, 1),
+
+            Vector3.new(-1, -2, -1), Vector3.new(1, -2, -1),
+            Vector3.new(1, -2, 1),   Vector3.new(-1, -2, 1)
         }
 
         local screenCorners = {}
-        local allOnScreen = true
+        local allVisible = true
+
         for i, offset in ipairs(corners) do
             local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
             local screenPos, onScreen = worldToViewport(worldPos)
             screenCorners[i] = screenPos
-            if not onScreen then allOnScreen = false end
+            if not onScreen then allVisible = false end
         end
 
-        -- ถ้าไม่อยู่บนหน้าจอ → ซ่อนเส้น
-        if not allOnScreen then
-            for _, line in ipairs(lines) do line.Visible = false end
+        if not allVisible then
+            for _, l in ipairs(lines) do l.Visible = false end
             return
         end
 
-        -- อัปเดตสีตาม CurrentTarget
-        local targetColor = (CurrentTarget == plr) and BOX_COLOR_LOCKED or BOX_COLOR_DEFAULT
-        if lines[1].Color ~= targetColor then
-            for _, line in ipairs(lines) do line:Remove() end
-            lines = createLines(targetColor)
-            espPlayers[plr].lines = lines
-        end
+        -- 🔥 เปลี่ยนสีเมื่อ tracerLine เล็งอยู่
+        local color = (CurrentTarget == plr)
+            and Color3.fromRGB(255, 0, 0)
+            or BOX_COLOR
 
-        -- อัปเดตตำแหน่งเส้น
         local edges = {
             {1,2},{2,3},{3,4},{4,1},
             {5,6},{6,7},{7,8},{8,5},
             {1,5},{2,6},{3,7},{4,8}
         }
+
         for i, edge in ipairs(edges) do
-            local line = lines[i]
-            line.From = screenCorners[edge[1]]
-            line.To = screenCorners[edge[2]]
-            line.Visible = true
+            local l = lines[i]
+            l.From = screenCorners[edge[1]]
+            l.To   = screenCorners[edge[2]]
+            l.Color = color
+            l.Visible = true
         end
     end)
 
-    espPlayers[plr] = {connection = connection, lines = lines}
+    espPlayers[plr] = {connection = conn, lines = lines}
 end
 
--- ลบ ESP
+
 local function removeBoxESP(plr)
-    if espPlayers[plr] then
-        if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end
-        for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end
-        espPlayers[plr] = nil
-    end
+    if not espPlayers[plr] then return end
+    espPlayers[plr].connection:Disconnect()
+    for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end
+    espPlayers[plr] = nil
 end
 
--- เปิด ESP ให้ทุกคน
+
 local function enableAllESP()
     for _, plr in pairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer then createBoxESP(plr) end
     end
 end
 
--- ปิด ESP
 local function disableAllESP()
     for plr, _ in pairs(espPlayers) do
         removeBoxESP(plr)
     end
 end
 
--- Player Added / Removing
+
 Players.PlayerAdded:Connect(function(plr)
-    task.wait(0.1)
-    if _G.ESPEnabled then createBoxESP(plr) end
+    task.wait(1)
+    if ESPEnabledValue.Value then
+        createBoxESP(plr)
+    end
 end)
+
 Players.PlayerRemoving:Connect(removeBoxESP)
 
+
+-- WindUI Toggle
 EspTab:Toggle({
-    Title = "Box",
-    Default = false,
+    Title = "ESP Box",
+    Value = ESPEnabledValue.Value,
     Callback = function(state)
-        _G.ESPEnabled = state
+        ESPEnabledValue.Value = state
         if state then
             enableAllESP()
         else
