@@ -684,6 +684,121 @@ MiscTab:Button({
     end
 })
 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local PingGui = Instance.new("ScreenGui")
+PingGui.Name = "PingDisplay"
+PingGui.ResetOnSpawn = false
+PingGui.Parent = PlayerGui
+PingGui.DisplayOrder = 999
+PingGui.Enabled = false -- เริ่มปิด
+
+local pingLabel = Instance.new("TextLabel")
+pingLabel.Size = UDim2.new(0, 120, 0, 30)
+pingLabel.Position = UDim2.new(0, 10, 0, 10) -- มุมซ้ายบน
+pingLabel.BackgroundTransparency = 1
+pingLabel.Font = Enum.Font.SourceSansBold
+pingLabel.TextSize = 18
+pingLabel.TextXAlignment = Enum.TextXAlignment.Left
+pingLabel.TextYAlignment = Enum.TextYAlignment.Top
+pingLabel.Text = "Ping: 0 ms"
+pingLabel.Parent = PingGui
+
+local pingStroke = Instance.new("UIStroke")
+pingStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+pingStroke.Color = Color3.fromRGB(0,0,0)
+pingStroke.Thickness = 2
+pingStroke.Parent = pingLabel
+
+local ShowPing = false
+
+local FpsGui = Instance.new("ScreenGui")
+FpsGui.Name = "FPSDisplay"
+FpsGui.ResetOnSpawn = false
+FpsGui.Parent = PlayerGui
+FpsGui.DisplayOrder = 999
+FpsGui.Enabled = false -- เริ่มปิด
+
+local fpsLabel = Instance.new("TextLabel")
+fpsLabel.Size = UDim2.new(0, 120, 0, 30)
+fpsLabel.Position = UDim2.new(0, 10, 0, 25) -- อยู่ใต้ Ping
+fpsLabel.BackgroundTransparency = 1
+fpsLabel.Font = Enum.Font.SourceSansBold
+fpsLabel.TextSize = 18
+fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
+fpsLabel.TextYAlignment = Enum.TextYAlignment.Top
+fpsLabel.Text = "FPS: 0"
+fpsLabel.Parent = FpsGui
+
+local fpsStroke = Instance.new("UIStroke")
+fpsStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+fpsStroke.Color = Color3.fromRGB(0,0,0)
+fpsStroke.Thickness = 2
+fpsStroke.Parent = fpsLabel
+
+local ShowFPS = false
+local lastTime = tick()
+local frameCount = 0
+
+RunService.RenderStepped:Connect(function()
+    -- Ping
+    if ShowPing then
+        local ping = math.floor(LocalPlayer:GetNetworkPing() * 1000)
+        pingLabel.Text = "Ping: "..ping.." ms"
+        if ping > 100 then
+            pingLabel.TextColor3 = Color3.fromRGB(255,0,0) -- แดง
+        elseif ping >= 70 and ping <= 80 then
+            pingLabel.TextColor3 = Color3.fromRGB(255,255,0) -- เหลือง
+        elseif ping < 60 then
+            pingLabel.TextColor3 = Color3.fromRGB(0,255,0) -- เขียว
+        else
+            pingLabel.TextColor3 = Color3.fromRGB(255,165,0) -- ส้ม
+        end
+    end
+
+    -- FPS
+    if ShowFPS then
+        frameCount = frameCount + 1
+        local currentTime = tick()
+        if currentTime - lastTime >= 1 then
+            fpsLabel.Text = "FPS: " .. frameCount
+            -- เปลี่ยนสี FPS
+            if frameCount < 30 then
+                fpsLabel.TextColor3 = Color3.fromRGB(255,0,0) -- แดง
+            elseif frameCount >= 30 and frameCount <= 60 then
+                fpsLabel.TextColor3 = Color3.fromRGB(255,255,0) -- เหลือง
+            else
+                fpsLabel.TextColor3 = Color3.fromRGB(0,255,0) -- เขียว
+            end
+            frameCount = 0
+            lastTime = currentTime
+        end
+    end
+end)
+
+CombatTab:Space()
+
+MiscTab:Toggle({
+    Title = "Show Ping",
+    Value = false,
+    Callback = function(state)
+        ShowPing = state
+        PingGui.Enabled = state
+    end
+})
+
+MiscTab:Toggle({
+    Title = "Show FPS",
+    Value = false,
+    Callback = function(state)
+        ShowFPS = state
+        FpsGui.Enabled = state
+    end
+})
+
 MiscTab:Code({
     Title = "My discord Server :",
     Code = [[ tiktok : KAIJN X HUB 
