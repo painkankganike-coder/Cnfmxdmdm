@@ -684,6 +684,8 @@ MiscTab:Button({
     end
 })
 
+MiscTab:Space()
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -779,7 +781,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-CombatTab:Space()
+
 
 MiscTab:Toggle({
     Title = "Show Ping",
