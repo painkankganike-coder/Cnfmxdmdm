@@ -426,6 +426,87 @@ EspTab:Toggle({
     end
 })
 
+local ESPEnabledValue = Instance.new("BoolValue")
+ESPEnabledValue.Name = "ESPEnabled"
+ESPEnabledValue.Value = false
+ESPEnabledValue.Parent = LocalPlayer
+
+-- ฟังก์ชันสร้าง Highlight
+local function CreateESP(player)
+    if not player.Character then return end
+    if player.Character:FindFirstChild("ESP_HIGHLIGHT") then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESP_HIGHLIGHT"
+    highlight.FillColor = Color3.fromRGB(180, 40, 255) -- ม่วงทึบ
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.2
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = player.Character
+end
+
+-- ลบ ESP ถ้าปิด
+local function RemoveESP(player)
+    if player.Character and player.Character:FindFirstChild("ESP_HIGHLIGHT") then
+        player.Character.ESP_HIGHLIGHT:Destroy()
+    end
+end
+
+-- อัปเดต ESP ทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if not ESPEnabledValue.Value then
+        -- ปิด ESP ลบทุกคนออก
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                RemoveESP(plr)
+            end
+        end
+        return
+    end
+
+    -- เปิด ESP → เพิ่ม highlight ทุกคน
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            if plr.Character then
+                CreateESP(plr)
+            end
+        end
+    end
+end)
+
+-- อัปเดตชื่อผู้เล่นทุก 60 วิ
+task.spawn(function()
+    while true do
+        task.wait(3)
+
+        if ESPEnabledValue.Value then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer then
+                    CreateESP(plr)
+                end
+            end
+        end
+    end
+end)
+
+-- WindUI ปุ่มเปิดปิด
+EspTab:Toggle({
+    Title = "Highlight",
+    Value = ESPEnabledValue.Value,
+    Callback = function(state)
+        ESPEnabledValue.Value = state
+        
+        if not state then
+            -- ปิด ESP → ลบทั้งหมด
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer then
+                    RemoveESP(plr)
+                end
+            end
+        end
+    end
+})
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
