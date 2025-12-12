@@ -793,6 +793,932 @@ WeaponTab:Toggle({
 })
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Config
+local BOX_COLOR = Color3.fromRGB(255, 255, 255)
+local TARGET_COLOR = Color3.fromRGB(255, 0, 0)
+local BOX_THICKNESS = 2
+local SCALE_MULTIPLIER = 1
+
+-- BoolValue สำหรับเก็บสถานะ ESP
+local ESPEnabledValue = Instance.new("BoolValue")
+ESPEnabledValue.Name = "ESPEnabled"
+ESPEnabledValue.Value = false
+ESPEnabledValue.Parent = LocalPlayer
+
+local espPlayers = {}
+local CurrentTarget = nil -- ตัวนี้คุณสามารถอัพเดตให้ตรงกับ Tracer/SilentAim
+
+-- แปลงตำแหน่งโลกเป็นหน้าจอ
+local function worldToViewport(pos)
+    local screen, onScreen = Camera:WorldToViewportPoint(pos)
+    return Vector2.new(screen.X, screen.Y), onScreen
+end
+
+-- สร้าง Box ESP
+local function createBoxESP(plr)
+    if espPlayers[plr] or plr == LocalPlayer then return end
+    local lines = {}
+    for i = 1, 12 do
+        local line = Drawing.new("Line")
+        line.Visible = false
+        line.Color = BOX_COLOR
+        line.Thickness = BOX_THICKNESS
+        lines[i] = line
+    end
+
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not ESPEnabledValue.Value then
+            for _, line in ipairs(lines) do line.Visible = false end
+            return
+        end
+
+        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
+            for _, line in ipairs(lines) do line.Visible = false end
+            return
+        end
+
+        local root = plr.Character.HumanoidRootPart
+        local rootPos = root.Position
+        local scale = root.Size.Y * SCALE_MULTIPLIER
+
+        local corners = {
+            Vector3.new(-1,2,-1),Vector3.new(1,2,-1),Vector3.new(1,2,1),Vector3.new(-1,2,1),
+            Vector3.new(-1,-2,-1),Vector3.new(1,-2,-1),Vector3.new(1,-2,1),Vector3.new(-1,-2,1)
+        }
+
+        local screenCorners = {}
+        local allOnScreen = true
+        for i, offset in ipairs(corners) do
+            local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
+            local screenPos, onScreen = worldToViewport(worldPos)
+            screenCorners[i] = screenPos
+            if not onScreen then allOnScreen = false end
+        end
+
+        if not allOnScreen then
+            for _, line in ipairs(lines) do line.Visible = false end
+            return
+        end
+
+        local color = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
+        local edges = {
+            {1,2},{2,3},{3,4},{4,1},
+            {5,6},{6,7},{7,8},{8,5},
+            {1,5},{2,6},{3,7},{4,8}
+        }
+
+        for i, edge in ipairs(edges) do
+            local line = lines[i]
+            line.From = screenCorners[edge[1]]
+            line.To = screenCorners[edge[2]]
+            line.Color = color
+            line.Visible = true
+        end
+    end)
+
+    espPlayers[plr] = {connection = connection, lines = lines}
+end
+
+local function removeBoxESP(plr)
+    if espPlayers[plr] then
+        if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end
+        for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end
+        espPlayers[plr] = nil
+    end
+end
+
+local function enableAllESP()
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then createBoxESP(plr) end
+    end
+end
+
+local function disableAllESP()
+    for plr, _ in pairs(espPlayers) do
+        removeBoxESP(plr)
+    end
+end
+
+-- Player Added/Removed
+Players.PlayerAdded:Connect(function(plr)
+    task.wait(1)
+    if ESPEnabledValue.Value then createBoxESP(plr) end
+end)
+Players.PlayerRemoving:Connect(removeBoxESP)
+
+EspTab:Toggle({
+    Title = "Box",
+    Icon = "eye",
+    Value = ESPEnabledValue.Value,
+    Callback = function(state)
+        ESPEnabledValue.Value = state
+        if state then
+            enableAllESP()
+        else
+            disableAllESP()
+        end
+    end
+})
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+local ESPNameEnabled = Instance.new("BoolValue")
+ESPNameEnabled.Name = "ESPNameEnabled"
+ESPNameEnabled.Value = false
+ESPNameEnabled.Parent = LocalPlayer
+
+local ESPDistanceEnabled = Instance.new("BoolValue")
+ESPDistanceEnabled.Name = "ESPDistanceEnabled"
+ESPDistanceEnabled.Value = false
+ESPDistanceEnabled.Parent = LocalPlayer
+
+local espDistanceTable = {}
+
+-- ฟังก์ชันสร้าง/อัพเดท ESP Name
+local function UpdateNameESP()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
+            local head = plr.Character.Head
+            local gui = head:FindFirstChild("NameESP")
+            if ESPNameEnabled.Value then
+                if not gui then
+                    local bill = Instance.new("BillboardGui")
+                    bill.Name = "NameESP"
+                    bill.Adornee = head
+                    bill.Parent = head
+                    bill.Size = UDim2.new(0, 120, 0, 25)
+                    bill.AlwaysOnTop = true
+                    bill.LightInfluence = 0
+                    bill.MaxDistance = 5000
+                    bill.StudsOffset = Vector3.new(0,9,0)
+
+                    local label = Instance.new("TextLabel")
+                    label.Parent = bill
+                    label.BackgroundTransparency = 1
+                    label.Size = UDim2.new(1,0,1,0)
+                    label.Font = Enum.Font.Gotham
+                    label.TextSize = 10
+                    label.TextColor3 = Color3.new(1,1,1)
+                    label.TextStrokeTransparency = 0
+                    label.TextStrokeColor3 = Color3.new(0,0,0)
+                    label.RichText = true
+                    label.Text = plr.Name
+                else
+                    gui.Enabled = true
+                end
+            else
+                if gui then gui.Enabled = false end
+            end
+        end
+    end
+end
+
+local function UpdateDistanceESP()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local localPos = LocalPlayer.Character.HumanoidRootPart.Position
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local root = plr.Character.HumanoidRootPart
+            local dist = math.floor((root.Position - localPos).Magnitude)
+
+            local data = espDistanceTable[plr]
+            if ESPDistanceEnabled.Value then
+                if not data then
+                    local bill = Instance.new("BillboardGui")
+                    bill.Name = "DistanceESP"
+                    bill.Adornee = root
+                    bill.Parent = root
+                    bill.Size = UDim2.new(0, 80, 0, 20)
+                    bill.AlwaysOnTop = true
+                    bill.LightInfluence = 0
+                    bill.StudsOffset = Vector3.new(0, -9, 0)
+
+                    local label = Instance.new("TextLabel")
+                    label.Parent = bill
+                    label.BackgroundTransparency = 1
+                    label.Size = UDim2.new(1,0,1,0)
+                    label.Font = Enum.Font.Gotham
+                    label.TextSize = 10
+                    label.TextColor3 = Color3.new(1,1,1)
+                    label.TextStrokeTransparency = 0
+                    label.TextStrokeColor3 = Color3.new(0,0,0)
+                    label.RichText = true
+                    label.Text = "Distance: "..dist.."m"
+
+                    espDistanceTable[plr] = {bill = bill, label = label}
+                else
+                    data.label.Text = "Distance: "..dist.."m"
+                    data.bill.Enabled = true
+                end
+            else
+                if data and data.bill then
+                    data.bill.Enabled = false
+                end
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        UpdateNameESP()
+        UpdateDistanceESP()
+    end
+end)
+
+-- Player Added / Removing
+Players.PlayerAdded:Connect(function(plr)
+    task.wait(0.5)
+    UpdateNameESP()
+    UpdateDistanceESP()
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    local gui = plr.Character and plr.Character:FindFirstChild("NameESP")
+    if gui then gui:Destroy() end
+    local distData = espDistanceTable[plr]
+    if distData and distData.bill then
+        distData.bill:Destroy()
+        espDistanceTable[plr] = nil
+    end
+end)
+
+-- WindUI Toggle
+EspTab:Toggle({
+    Title = "ESP Name",
+    Icon = "circle-check",
+    Default = false,
+    Callback = function(state)
+        ESPNameEnabled.Value = state
+    end
+})
+
+EspTab:Toggle({
+    Title = "ESP Distance",
+    Icon = "circle-check",
+    Default = false,
+    Callback = function(state)
+        ESPDistanceEnabled.Value = state
+    end
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- BoolValue เปิด/ปิด Health Bar
+local ESPHealthEnabled = Instance.new("BoolValue")
+ESPHealthEnabled.Name = "ESPHealthEnabled"
+ESPHealthEnabled.Value = false
+ESPHealthEnabled.Parent = LocalPlayer
+
+local healthBars = {}
+
+-- ฟังก์ชันสร้าง Health Bar แนวนอน
+local function CreateHealthBar(plr)
+    if plr == LocalPlayer then return end
+    if not plr.Character or not plr.Character:FindFirstChild("Humanoid") then return end
+    local humanoid = plr.Character.Humanoid
+
+    if plr.Character:FindFirstChild("HealthESP") then
+        plr.Character.HealthESP:Destroy()
+    end
+
+    local bar = Instance.new("BillboardGui")
+    bar.Name = "HealthESP"
+    bar.Adornee = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("Head")
+    bar.Size = UDim2.new(0, 30, 0, 3) -- กว้าง 60 สูง 6 studs
+    bar.StudsOffset = Vector3.new(0, -5, 0) -- วางเหนือหัว
+    bar.AlwaysOnTop = true
+    bar.LightInfluence = 0
+    bar.Parent = plr.Character
+
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(1,0,1,0)
+    bg.Position = UDim2.new(0,0,0,0)
+    bg.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    bg.BorderSizePixel = 0
+    bg.Parent = bar
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1,0,1,0)
+    frame.Position = UDim2.new(0,0,0,0)
+    frame.BackgroundColor3 = Color3.fromRGB(144,238,144)
+    frame.BorderSizePixel = 0
+    frame.Parent = bg
+
+    healthBars[plr] = {bar = bar, bg = bg, frame = frame, humanoid = humanoid}
+end
+
+-- อัพเดท Health Bar ทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if not ESPHealthEnabled.Value then
+        for plr, data in pairs(healthBars) do
+            data.bar.Enabled = false
+        end
+        return
+    end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            if plr.Character and plr.Character:FindFirstChild("Humanoid") then
+                if not healthBars[plr] then
+                    CreateHealthBar(plr)
+                end
+                local data = healthBars[plr]
+                local humanoid = data.humanoid
+                local percent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                data.frame.Size = UDim2.new(percent,0,1,0)
+                data.frame.Position = UDim2.new(0,0,0,0) -- อยู่ซ้ายไปขวา
+
+                -- สีอ่อนตามเลือด
+                if percent > 0.5 then
+                    data.frame.BackgroundColor3 = Color3.fromRGB(144,238,144) -- เขียวอ่อน
+                elseif percent > 0.25 then
+                    data.frame.BackgroundColor3 = Color3.fromRGB(255,255,102) -- เหลืองอ่อน
+                else
+                    data.frame.BackgroundColor3 = Color3.fromRGB(255,102,102) -- แดงอ่อน
+                end
+                data.bar.Enabled = true
+            end
+        end
+    end
+end)
+
+Players.PlayerAdded:Connect(function(plr)
+    task.wait(0.5)
+    if ESPHealthEnabled.Value then
+        CreateHealthBar(plr)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    if healthBars[plr] then
+        healthBars[plr].bar:Destroy()
+        healthBars[plr] = nil
+    end
+end)
+
+EspTab:Toggle({
+    Title = "Health",
+    Default = false,
+    Callback = function(state)
+        ESPHealthEnabled.Value = state
+    end
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContentProvider = game:GetService("ContentProvider")
+local LocalPlayer = Players.LocalPlayer
+
+local ItemESP_Enabled = false
+local BillboardCache = {}
+local ItemESP_UpdateConnections = {}
+local WeaponDB = {}
+local PreloadedImages = {}
+
+local RARITY_COLORS = {
+    ["Common"] = Color3.fromRGB(230, 224, 224),
+    ["Uncommon"] = Color3.fromRGB(230, 224, 224),
+    ["Rare"] = Color3.fromRGB(230, 224, 224),
+    ["Epic"] = Color3.fromRGB(230, 224, 224),
+    ["Legendary"] = Color3.fromRGB(230, 224, 224),
+    ["Omega"] = Color3.fromRGB(230, 224, 224),
+}
+
+-- ฟังก์ชันสร้าง key ของ Tool
+local function generateUniqueKey(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local itemId = tool:GetAttribute("ItemId") or tool:GetAttribute("Id") or tool:GetAttribute("WeaponId") or tool:GetAttribute("GunId")
+    if itemId and itemId ~= "" then
+        return "ITEMID_" .. tostring(itemId)
+    end
+
+    local partsData = {}
+    for _, part in ipairs(tool:GetDescendants()) do
+        if part:IsA("SpecialMesh") and part.MeshId and part.MeshId ~= "" then
+            table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureId or "NOTEX"))
+        elseif part:IsA("MeshPart") and part.MeshId and part.MeshId ~= "" then
+            table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureID or "NOTEX"))
+        elseif part:IsA("Decal") and part.Texture and part.Texture ~= "" then
+            table.insert(partsData, "DECAL_"..part.Texture)
+        end
+    end
+
+    if #partsData > 0 then
+        table.sort(partsData)
+        return "MESHKEY_" .. table.concat(partsData, ";")
+    end
+
+    local displayName = tool:GetAttribute("DisplayName") or tool.Name
+    local toolName = tool.Name
+    local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
+    local imageId = tool:GetAttribute("ImageId") or "NOIMAGE"
+    return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
+end
+
+local function registerItems(folder)
+    for _, tool in ipairs(folder:GetDescendants()) do
+        if not tool:IsA("Tool") then continue end
+        local key = generateUniqueKey(tool)
+        if not key then continue end
+
+        local displayName = tool:GetAttribute("DisplayName") or tool.Name
+        local imageId = tool:GetAttribute("ImageId") or "rbxassetid://7072725737"
+        local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
+
+        WeaponDB[key] = {
+            Name = displayName,
+            Rarity = rarity,
+            ImageId = imageId,
+            ToolName = tool.Name,
+            Key = key
+        }
+
+        if imageId and imageId ~= "" and not PreloadedImages[imageId] then
+            PreloadedImages[imageId] = true
+            task.spawn(function()
+                pcall(function()
+                    ContentProvider:PreloadAsync({imageId})
+                end)
+            end)
+        end
+    end
+end
+
+pcall(function()
+    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 5)
+    if itemsFolder then registerItems(itemsFolder) end
+    for _, obj in ipairs(ReplicatedStorage:GetChildren()) do
+        if obj:IsA("Folder") and (obj.Name:find("Weapon") or obj.Name:find("Item") or obj.Name:find("Tool")) then
+            registerItems(obj)
+        end
+    end
+    registerItems(game:GetService("StarterPack"))
+end)
+
+local function getWeaponInfo(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local key = generateUniqueKey(tool)
+    return WeaponDB[key]
+end
+
+local function createBillboardForPlayer(player)
+    if player == LocalPlayer then return end
+
+    local function updateESP()
+        if not ItemESP_Enabled or not player.Character then return end
+
+        local currentTools = {}
+        local function scan(folder)
+            if not folder then return end
+            for _, tool in ipairs(folder:GetChildren()) do
+                if tool:IsA("Tool") and tool.Name ~= "Fists" then
+                    local info = getWeaponInfo(tool)
+                    if info then
+                        table.insert(currentTools, info)
+                    end
+                end
+            end
+        end
+
+        scan(player.Character)
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then scan(backpack) end
+
+        if not BillboardCache[player] or not BillboardCache[player].Parent then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "ItemESP"
+            billboard.Adornee = hrp
+            billboard.Size = UDim2.new(0, 280, 0, 40)
+            billboard.StudsOffset = Vector3.new(0, -6.5, 0)
+            billboard.AlwaysOnTop = true
+            billboard.LightInfluence = 0
+            billboard.Parent = hrp
+
+            local container = Instance.new("Frame", billboard)
+            container.Size = UDim2.new(1,0,1,0)
+            container.BackgroundTransparency = 1
+
+            BillboardCache[player] = billboard
+        end
+
+        -- อัปเดต Tool ภายใน Billboard
+        local container = BillboardCache[player]:FindFirstChildOfClass("Frame")
+        if container then
+            container:ClearAllChildren()
+            local layout = Instance.new("UIGridLayout")
+            layout.CellSize = UDim2.new(0,35,0,35)
+            layout.CellPadding = UDim2.new(0,6,0,0)
+            layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+            layout.VerticalAlignment = Enum.VerticalAlignment.Center
+            layout.SortOrder = Enum.SortOrder.LayoutOrder
+            layout.Parent = container
+
+            for i, info in ipairs(currentTools) do
+                local img = Instance.new("ImageLabel")
+                img.Parent = container
+                img.Size = UDim2.new(0,35,0,35)
+                img.BackgroundTransparency = 1
+                img.Image = info.ImageId or "rbxassetid://7072725737"
+                img.ScaleType = Enum.ScaleType.Fit
+                img.LayoutOrder = i
+                local color = RARITY_COLORS[info.Rarity] or Color3.fromRGB(255,255,255)
+                img.ImageColor3 = color:Lerp(Color3.new(1,1,1),0.35)
+            end
+        end
+    end
+
+    -- อัปเดตทันทีทุก 1 วินาที
+    task.spawn(function()
+        while ItemESP_Enabled and player.Parent do
+            pcall(updateESP)
+            task.wait(1)
+        end
+    end)
+
+    -- เก็บ connection
+    ItemESP_UpdateConnections[player] = {}
+    if player.Character then
+        table.insert(ItemESP_UpdateConnections[player], player.Character.ChildAdded:Connect(function()
+            if ItemESP_Enabled then task.defer(updateESP) end
+        end))
+        table.insert(ItemESP_UpdateConnections[player], player.Character.ChildRemoved:Connect(function()
+            if ItemESP_Enabled then task.defer(updateESP) end
+        end))
+    end
+end
+
+-- ฟังก์ชันอัปเดตทุกคน (สร้าง Billboard ใหม่ถ้าหาย)
+local function UpdateAllItemESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local hasBillboard = BillboardCache[player] and BillboardCache[player].Parent
+            if ItemESP_Enabled and (not hasBillboard) then
+                createBillboardForPlayer(player)
+            end
+        end
+    end
+end
+
+-- Loop อัปเดตทุก 1 วินาที
+task.spawn(function()
+    while true do
+        task.wait(1)
+        UpdateAllItemESP()
+    end
+end)
+
+-- Loop สร้าง/รีเฟรช Billboard ใหม่ทุก 20 วินาที
+task.spawn(function()
+    while true do
+        task.wait(20)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and ItemESP_Enabled then
+                if BillboardCache[player] and BillboardCache[player].Parent then
+                    BillboardCache[player]:Destroy()
+                    BillboardCache[player] = nil
+                end
+                createBillboardForPlayer(player)
+            end
+        end
+    end
+end)
+
+-- Player Added/Removed
+Players.PlayerAdded:Connect(function(p)
+    if p ~= LocalPlayer and ItemESP_Enabled then
+        task.wait(0.1)
+        createBillboardForPlayer(p)
+    end
+end)
+Players.PlayerRemoving:Connect(function(p)
+    if BillboardCache[p] then
+        BillboardCache[p]:Destroy()
+        BillboardCache[p] = nil
+    end
+    if ItemESP_UpdateConnections[p] then
+        for _, conn in pairs(ItemESP_UpdateConnections[p]) do
+            if conn.Connected then conn:Disconnect() end
+        end
+        ItemESP_UpdateConnections[p] = nil
+    end
+end)
+
+-- WindUI Toggle (สมมติว่า EspTab มีอยู่แล้ว)
+EspTab:Toggle({
+    Title = "Item",
+    Icon = "circle-check",
+    Value = ItemESP_Enabled,
+    Callback = function(state)
+        ItemESP_Enabled = state
+        if state then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    createBillboardForPlayer(p)
+                end
+            end
+        else
+            for p, billboard in pairs(BillboardCache) do
+                if billboard then billboard:Destroy() end
+            end
+            BillboardCache = {}
+            for player, conns in pairs(ItemESP_UpdateConnections) do
+                for _, conn in pairs(conns) do
+                    if conn.Connected then conn:Disconnect() end
+                end
+                ItemESP_UpdateConnections[player] = nil
+            end
+        end
+    end
+})
+
+EspTab:Space()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+local ItemESP_Enabled = false
+local ESP_Items = {}
+
+-- สีม่วงสว่างแบบเท่ ๆ
+local HIGHLIGHT_COLOR = Color3.fromRGB(200, 0, 255)
+local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
+
+-- โฟลเดอร์ของตก (รองรับทั้ง DroppedItem และ DroppedItems)
+local droppedFolder = Workspace:FindFirstChild("DroppedItem") or Workspace:FindFirstChild("DroppedItems")
+if not droppedFolder then
+    warn("ไม่พบโฟลเดอร์ DroppedItem / DroppedItems")
+    return
+end
+
+-- ฟังก์ชันสร้าง ESP ให้ไอเทม 1 ชิ้น
+local function createItemESP(item)
+    if not ItemESP_Enabled then return end
+    if ESP_Items[item] then return end  -- ถ้ามีแล้วไม่ทำซ้ำ
+    if item.Name == "Money" then return end  -- ยกเว้น Money
+    if not item:FindFirstChild("Handle") and not item.PrimaryPart then return end
+
+    local handle = item:FindFirstChild("Handle") or item.PrimaryPart
+
+    -- Highlight สีม่วงสว่าง
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = HIGHLIGHT_COLOR
+    highlight.OutlineColor = HIGHLIGHT_COLOR
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = item
+
+    -- ชื่อไอเทม (Drawing Text)
+    local nameText = Drawing.new("Text")
+    nameText.Size = 10
+    nameText.Color = TEXT_COLOR
+    nameText.Center = true
+    nameText.Outline = true
+    nameText.Font = 2
+    nameText.Visible = true
+    nameText.Text = item.Name
+
+    -- ระยะทาง (Drawing Text)
+    local distanceText = Drawing.new("Text")
+    distanceText.Size = 10
+    distanceText.Color = TEXT_COLOR
+    distanceText.Center = true
+    distanceText.Outline = true
+    distanceText.Font = 2
+    distanceText.Visible = true
+
+    -- เก็บไว้ในตาราง
+    ESP_Items[item] = {
+        highlight = highlight,
+        name = nameText,
+        distance = distanceText,
+        handle = handle
+    }
+
+    -- ลบเมื่อไอเทมหาย
+    item.AncestryChanged:Connect(function()
+        if not item.Parent then
+            if ESP_Items[item] then
+                highlight:Destroy()
+                nameText:Remove()
+                distanceText:Remove()
+                ESP_Items[item] = nil
+            end
+        end
+    end)
+end
+
+-- ฟังก์ชันเปิด ESP
+local function enableItemESP()
+    ItemESP_Enabled = true
+    -- สแกนของเดิม
+    for _, item in pairs(droppedFolder:GetChildren()) do
+        if item:IsA("Model") or item:IsA("Tool") or item:IsA("Folder") then
+            task.spawn(function()
+                task.wait(0.3)
+                createItemESP(item)
+            end)
+        end
+    end
+end
+
+-- ฟังก์ชันปิด ESP
+local function disableItemESP()
+    ItemESP_Enabled = false
+    for item, data in pairs(ESP_Items) do
+        if data.highlight then data.highlight:Destroy() end
+        if data.name then data.name:Remove() end
+        if data.distance then data.distance:Remove() end
+    end
+    ESP_Items = {}
+end
+
+-- อัปเดตตำแหน่งชื่อ + ระยะทางทุกเฟรม
+RunService.Heartbeat:Connect(function()
+    if not ItemESP_Enabled then return end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local rootPos = player.Character.HumanoidRootPart.Position
+
+    for item, data in pairs(ESP_Items) do
+        if item and item.Parent and data.handle and data.handle.Parent then
+            local worldPos = data.handle.Position + Vector3.new(0, 2, 0)
+            local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
+
+            if onScreen then
+                local screen2D = Vector2.new(screenPos.X, screenPos.Y)
+                local distance = math.floor((rootPos - data.handle.Position).Magnitude)
+
+                data.name.Position = screen2D
+                data.name.Visible = true
+
+                data.distance.Position = screen2D + Vector2.new(0, 18)
+                data.distance.Text = distance .. "m"
+                data.distance.Visible = true
+            else
+                data.name.Visible = false
+                data.distance.Visible = false
+            end
+        else
+
+if data.highlight then data.highlight:Destroy() end
+            if data.name then data.name:Remove() end
+            if data.distance then data.distance:Remove() end
+            ESP_Items[item] = nil
+        end
+    end
+end)
+
+droppedFolder.ChildAdded:Connect(function(item)
+    task.wait(1.5)
+    createItemESP(item)
+end)
+
+EspTab:Toggle({
+    Title = "Dropped Items",
+    Value = ItemESP_Enabled,
+    Callback = function(state)
+        if state then
+            enableItemESP()
+        else
+            disableItemESP()
+        end
+    end
+})
+
+local ESPMoneyEnabledValue = Instance.new("BoolValue")
+ESPMoneyEnabledValue.Name = "ESPMoneyEnabled"
+ESPMoneyEnabledValue.Value = false
+ESPMoneyEnabledValue.Parent = player
+
+local ESP_Money = {}  -- เก็บ Highlight + Drawing สำหรับ Money
+
+-- สีเขียว
+local HIGHLIGHT_COLOR = Color3.fromRGB(0, 255, 0)
+local TEXT_COLOR = Color3.fromRGB(0, 255, 0)
+
+-- โฟลเดอร์ของ Money
+local droppedFolder = Workspace:FindFirstChild("DroppedItem") or Workspace:FindFirstChild("DroppedItems")
+if not droppedFolder then
+    warn("ไม่พบโฟลเดอร์ DroppedItem / DroppedItems")
+    return
+end
+
+-- ฟังก์ชันสร้าง ESP สำหรับ Money 1 ชิ้น
+local function createMoneyESP(item)
+    if ESP_Money[item] then return end
+    if item.Name ~= "Money" then return end
+
+    local mainPart = item:FindFirstChild("Handle") or item.PrimaryPart or item:FindFirstChildOfClass("Part")
+    if not mainPart then return end
+
+    if ESPMoneyEnabledValue.Value then
+        -- Highlight
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_HIGHLIGHT"
+        highlight.FillColor = HIGHLIGHT_COLOR
+        highlight.OutlineColor = HIGHLIGHT_COLOR
+        highlight.FillTransparency = 0.3
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Parent = item
+
+        -- ชื่อ Money
+        local nameText = Drawing.new("Text")
+        nameText.Size = 10
+        nameText.Color = TEXT_COLOR
+        nameText.Center = true
+        nameText.Outline = true
+        nameText.Font = 2
+        nameText.Visible = true
+        nameText.Text = item.Name
+
+        ESP_Money[item] = {
+            highlight = highlight,
+            name = nameText,
+            mainPart = mainPart
+        }
+
+        -- ลบเมื่อ Item หาย
+        item.AncestryChanged:Connect(function()
+            if not item.Parent and ESP_Money[item] then
+                if ESP_Money[item].highlight then ESP_Money[item].highlight:Destroy() end
+                if ESP_Money[item].name then ESP_Money[item].name:Remove() end
+                ESP_Money[item] = nil
+            end
+        end)
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if not ESPMoneyEnabledValue.Value then return end
+
+    for item, data in pairs(ESP_Money) do
+        if item and item.Parent and data.mainPart and data.mainPart.Parent then
+            local worldPos = data.mainPart.Position + Vector3.new(0, 2, 0)
+            local screenPos, onScreen = Workspace.CurrentCamera:WorldToViewportPoint(worldPos)
+            if onScreen then
+                data.name.Position = Vector2.new(screenPos.X, screenPos.Y)
+                data.name.Visible = true
+            else
+                data.name.Visible = false
+            end
+        else
+            if data.highlight then data.highlight:Destroy() end
+            if data.name then data.name:Remove() end
+            ESP_Money[item] = nil
+        end
+    end
+end)
+
+for _, item in pairs(droppedFolder:GetChildren()) do createMoneyESP(item) end
+
+droppedFolder.ChildAdded:Connect(function(item)
+    task.wait(0.5)
+    createMoneyESP(item)
+end)
+
+EspTab:Toggle({
+    Title = "ESP Money",
+    Value = ESPMoneyEnabledValue.Value,
+    Callback = function(state)
+        ESPMoneyEnabledValue.Value = state
+
+        if not state then
+            for item, data in pairs(ESP_Money) do
+                if data.highlight then data.highlight:Destroy() end
+                if data.name then data.name:Remove() end
+                ESP_Money[item] = nil
+            end
+        else
+
+            for _, item in pairs(droppedFolder:GetChildren()) do
+                createMoneyESP(item)
+            end
+        end
+    end
+})
+
+local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
@@ -1709,930 +2635,3 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if gpe then return end
     if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
 end)
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-
--- Config
-local BOX_COLOR = Color3.fromRGB(255, 255, 255)
-local TARGET_COLOR = Color3.fromRGB(255, 0, 0)
-local BOX_THICKNESS = 2
-local SCALE_MULTIPLIER = 1
-
--- BoolValue สำหรับเก็บสถานะ ESP
-local ESPEnabledValue = Instance.new("BoolValue")
-ESPEnabledValue.Name = "ESPEnabled"
-ESPEnabledValue.Value = false
-ESPEnabledValue.Parent = LocalPlayer
-
-local espPlayers = {}
-local CurrentTarget = nil -- ตัวนี้คุณสามารถอัพเดตให้ตรงกับ Tracer/SilentAim
-
--- แปลงตำแหน่งโลกเป็นหน้าจอ
-local function worldToViewport(pos)
-    local screen, onScreen = Camera:WorldToViewportPoint(pos)
-    return Vector2.new(screen.X, screen.Y), onScreen
-end
-
--- สร้าง Box ESP
-local function createBoxESP(plr)
-    if espPlayers[plr] or plr == LocalPlayer then return end
-    local lines = {}
-    for i = 1, 12 do
-        local line = Drawing.new("Line")
-        line.Visible = false
-        line.Color = BOX_COLOR
-        line.Thickness = BOX_THICKNESS
-        lines[i] = line
-    end
-
-    local connection
-    connection = RunService.RenderStepped:Connect(function()
-        if not ESPEnabledValue.Value then
-            for _, line in ipairs(lines) do line.Visible = false end
-            return
-        end
-
-        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
-            for _, line in ipairs(lines) do line.Visible = false end
-            return
-        end
-
-        local root = plr.Character.HumanoidRootPart
-        local rootPos = root.Position
-        local scale = root.Size.Y * SCALE_MULTIPLIER
-
-        local corners = {
-            Vector3.new(-1,2,-1),Vector3.new(1,2,-1),Vector3.new(1,2,1),Vector3.new(-1,2,1),
-            Vector3.new(-1,-2,-1),Vector3.new(1,-2,-1),Vector3.new(1,-2,1),Vector3.new(-1,-2,1)
-        }
-
-        local screenCorners = {}
-        local allOnScreen = true
-        for i, offset in ipairs(corners) do
-            local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
-            local screenPos, onScreen = worldToViewport(worldPos)
-            screenCorners[i] = screenPos
-            if not onScreen then allOnScreen = false end
-        end
-
-        if not allOnScreen then
-            for _, line in ipairs(lines) do line.Visible = false end
-            return
-        end
-
-        local color = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
-        local edges = {
-            {1,2},{2,3},{3,4},{4,1},
-            {5,6},{6,7},{7,8},{8,5},
-            {1,5},{2,6},{3,7},{4,8}
-        }
-
-        for i, edge in ipairs(edges) do
-            local line = lines[i]
-            line.From = screenCorners[edge[1]]
-            line.To = screenCorners[edge[2]]
-            line.Color = color
-            line.Visible = true
-        end
-    end)
-
-    espPlayers[plr] = {connection = connection, lines = lines}
-end
-
-local function removeBoxESP(plr)
-    if espPlayers[plr] then
-        if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end
-        for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end
-        espPlayers[plr] = nil
-    end
-end
-
-local function enableAllESP()
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then createBoxESP(plr) end
-    end
-end
-
-local function disableAllESP()
-    for plr, _ in pairs(espPlayers) do
-        removeBoxESP(plr)
-    end
-end
-
--- Player Added/Removed
-Players.PlayerAdded:Connect(function(plr)
-    task.wait(1)
-    if ESPEnabledValue.Value then createBoxESP(plr) end
-end)
-Players.PlayerRemoving:Connect(removeBoxESP)
-
-EspTab:Toggle({
-    Title = "Box",
-    Icon = "eye",
-    Value = ESPEnabledValue.Value,
-    Callback = function(state)
-        ESPEnabledValue.Value = state
-        if state then
-            enableAllESP()
-        else
-            disableAllESP()
-        end
-    end
-})
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
-
-local ESPNameEnabled = Instance.new("BoolValue")
-ESPNameEnabled.Name = "ESPNameEnabled"
-ESPNameEnabled.Value = false
-ESPNameEnabled.Parent = LocalPlayer
-
-local ESPDistanceEnabled = Instance.new("BoolValue")
-ESPDistanceEnabled.Name = "ESPDistanceEnabled"
-ESPDistanceEnabled.Value = false
-ESPDistanceEnabled.Parent = LocalPlayer
-
-local espDistanceTable = {}
-
--- ฟังก์ชันสร้าง/อัพเดท ESP Name
-local function UpdateNameESP()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
-            local head = plr.Character.Head
-            local gui = head:FindFirstChild("NameESP")
-            if ESPNameEnabled.Value then
-                if not gui then
-                    local bill = Instance.new("BillboardGui")
-                    bill.Name = "NameESP"
-                    bill.Adornee = head
-                    bill.Parent = head
-                    bill.Size = UDim2.new(0, 120, 0, 25)
-                    bill.AlwaysOnTop = true
-                    bill.LightInfluence = 0
-                    bill.MaxDistance = 5000
-                    bill.StudsOffset = Vector3.new(0,9,0)
-
-                    local label = Instance.new("TextLabel")
-                    label.Parent = bill
-                    label.BackgroundTransparency = 1
-                    label.Size = UDim2.new(1,0,1,0)
-                    label.Font = Enum.Font.Gotham
-                    label.TextSize = 10
-                    label.TextColor3 = Color3.new(1,1,1)
-                    label.TextStrokeTransparency = 0
-                    label.TextStrokeColor3 = Color3.new(0,0,0)
-                    label.RichText = true
-                    label.Text = plr.Name
-                else
-                    gui.Enabled = true
-                end
-            else
-                if gui then gui.Enabled = false end
-            end
-        end
-    end
-end
-
-local function UpdateDistanceESP()
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
-    local localPos = LocalPlayer.Character.HumanoidRootPart.Position
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local root = plr.Character.HumanoidRootPart
-            local dist = math.floor((root.Position - localPos).Magnitude)
-
-            local data = espDistanceTable[plr]
-            if ESPDistanceEnabled.Value then
-                if not data then
-                    local bill = Instance.new("BillboardGui")
-                    bill.Name = "DistanceESP"
-                    bill.Adornee = root
-                    bill.Parent = root
-                    bill.Size = UDim2.new(0, 80, 0, 20)
-                    bill.AlwaysOnTop = true
-                    bill.LightInfluence = 0
-                    bill.StudsOffset = Vector3.new(0, -9, 0)
-
-                    local label = Instance.new("TextLabel")
-                    label.Parent = bill
-                    label.BackgroundTransparency = 1
-                    label.Size = UDim2.new(1,0,1,0)
-                    label.Font = Enum.Font.Gotham
-                    label.TextSize = 10
-                    label.TextColor3 = Color3.new(1,1,1)
-                    label.TextStrokeTransparency = 0
-                    label.TextStrokeColor3 = Color3.new(0,0,0)
-                    label.RichText = true
-                    label.Text = "Distance: "..dist.."m"
-
-                    espDistanceTable[plr] = {bill = bill, label = label}
-                else
-                    data.label.Text = "Distance: "..dist.."m"
-                    data.bill.Enabled = true
-                end
-            else
-                if data and data.bill then
-                    data.bill.Enabled = false
-                end
-            end
-        end
-    end
-end
-
-task.spawn(function()
-    while true do
-        task.wait(1)
-        UpdateNameESP()
-        UpdateDistanceESP()
-    end
-end)
-
--- Player Added / Removing
-Players.PlayerAdded:Connect(function(plr)
-    task.wait(0.5)
-    UpdateNameESP()
-    UpdateDistanceESP()
-end)
-
-Players.PlayerRemoving:Connect(function(plr)
-    local gui = plr.Character and plr.Character:FindFirstChild("NameESP")
-    if gui then gui:Destroy() end
-    local distData = espDistanceTable[plr]
-    if distData and distData.bill then
-        distData.bill:Destroy()
-        espDistanceTable[plr] = nil
-    end
-end)
-
--- WindUI Toggle
-EspTab:Toggle({
-    Title = "ESP Name",
-    Icon = "circle-check",
-    Default = false,
-    Callback = function(state)
-        ESPNameEnabled.Value = state
-    end
-})
-
-EspTab:Toggle({
-    Title = "ESP Distance",
-    Icon = "circle-check",
-    Default = false,
-    Callback = function(state)
-        ESPDistanceEnabled.Value = state
-    end
-})
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-
--- BoolValue เปิด/ปิด Health Bar
-local ESPHealthEnabled = Instance.new("BoolValue")
-ESPHealthEnabled.Name = "ESPHealthEnabled"
-ESPHealthEnabled.Value = false
-ESPHealthEnabled.Parent = LocalPlayer
-
-local healthBars = {}
-
--- ฟังก์ชันสร้าง Health Bar แนวนอน
-local function CreateHealthBar(plr)
-    if plr == LocalPlayer then return end
-    if not plr.Character or not plr.Character:FindFirstChild("Humanoid") then return end
-    local humanoid = plr.Character.Humanoid
-
-    if plr.Character:FindFirstChild("HealthESP") then
-        plr.Character.HealthESP:Destroy()
-    end
-
-    local bar = Instance.new("BillboardGui")
-    bar.Name = "HealthESP"
-    bar.Adornee = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("Head")
-    bar.Size = UDim2.new(0, 30, 0, 3) -- กว้าง 60 สูง 6 studs
-    bar.StudsOffset = Vector3.new(0, -5, 0) -- วางเหนือหัว
-    bar.AlwaysOnTop = true
-    bar.LightInfluence = 0
-    bar.Parent = plr.Character
-
-    local bg = Instance.new("Frame")
-    bg.Size = UDim2.new(1,0,1,0)
-    bg.Position = UDim2.new(0,0,0,0)
-    bg.BackgroundColor3 = Color3.fromRGB(0,0,0)
-    bg.BorderSizePixel = 0
-    bg.Parent = bar
-
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1,0,1,0)
-    frame.Position = UDim2.new(0,0,0,0)
-    frame.BackgroundColor3 = Color3.fromRGB(144,238,144)
-    frame.BorderSizePixel = 0
-    frame.Parent = bg
-
-    healthBars[plr] = {bar = bar, bg = bg, frame = frame, humanoid = humanoid}
-end
-
--- อัพเดท Health Bar ทุกเฟรม
-RunService.RenderStepped:Connect(function()
-    if not ESPHealthEnabled.Value then
-        for plr, data in pairs(healthBars) do
-            data.bar.Enabled = false
-        end
-        return
-    end
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            if plr.Character and plr.Character:FindFirstChild("Humanoid") then
-                if not healthBars[plr] then
-                    CreateHealthBar(plr)
-                end
-                local data = healthBars[plr]
-                local humanoid = data.humanoid
-                local percent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-                data.frame.Size = UDim2.new(percent,0,1,0)
-                data.frame.Position = UDim2.new(0,0,0,0) -- อยู่ซ้ายไปขวา
-
-                -- สีอ่อนตามเลือด
-                if percent > 0.5 then
-                    data.frame.BackgroundColor3 = Color3.fromRGB(144,238,144) -- เขียวอ่อน
-                elseif percent > 0.25 then
-                    data.frame.BackgroundColor3 = Color3.fromRGB(255,255,102) -- เหลืองอ่อน
-                else
-                    data.frame.BackgroundColor3 = Color3.fromRGB(255,102,102) -- แดงอ่อน
-                end
-                data.bar.Enabled = true
-            end
-        end
-    end
-end)
-
-Players.PlayerAdded:Connect(function(plr)
-    task.wait(0.5)
-    if ESPHealthEnabled.Value then
-        CreateHealthBar(plr)
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(plr)
-    if healthBars[plr] then
-        healthBars[plr].bar:Destroy()
-        healthBars[plr] = nil
-    end
-end)
-
-EspTab:Toggle({
-    Title = "Health",
-    Default = false,
-    Callback = function(state)
-        ESPHealthEnabled.Value = state
-    end
-})
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ContentProvider = game:GetService("ContentProvider")
-local LocalPlayer = Players.LocalPlayer
-
-local ItemESP_Enabled = false
-local BillboardCache = {}
-local ItemESP_UpdateConnections = {}
-local WeaponDB = {}
-local PreloadedImages = {}
-
-local RARITY_COLORS = {
-    ["Common"] = Color3.fromRGB(230, 224, 224),
-    ["Uncommon"] = Color3.fromRGB(230, 224, 224),
-    ["Rare"] = Color3.fromRGB(230, 224, 224),
-    ["Epic"] = Color3.fromRGB(230, 224, 224),
-    ["Legendary"] = Color3.fromRGB(230, 224, 224),
-    ["Omega"] = Color3.fromRGB(230, 224, 224),
-}
-
--- ฟังก์ชันสร้าง key ของ Tool
-local function generateUniqueKey(tool)
-    if not tool or not tool:IsA("Tool") then return nil end
-    local itemId = tool:GetAttribute("ItemId") or tool:GetAttribute("Id") or tool:GetAttribute("WeaponId") or tool:GetAttribute("GunId")
-    if itemId and itemId ~= "" then
-        return "ITEMID_" .. tostring(itemId)
-    end
-
-    local partsData = {}
-    for _, part in ipairs(tool:GetDescendants()) do
-        if part:IsA("SpecialMesh") and part.MeshId and part.MeshId ~= "" then
-            table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureId or "NOTEX"))
-        elseif part:IsA("MeshPart") and part.MeshId and part.MeshId ~= "" then
-            table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureID or "NOTEX"))
-        elseif part:IsA("Decal") and part.Texture and part.Texture ~= "" then
-            table.insert(partsData, "DECAL_"..part.Texture)
-        end
-    end
-
-    if #partsData > 0 then
-        table.sort(partsData)
-        return "MESHKEY_" .. table.concat(partsData, ";")
-    end
-
-    local displayName = tool:GetAttribute("DisplayName") or tool.Name
-    local toolName = tool.Name
-    local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
-    local imageId = tool:GetAttribute("ImageId") or "NOIMAGE"
-    return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
-end
-
-local function registerItems(folder)
-    for _, tool in ipairs(folder:GetDescendants()) do
-        if not tool:IsA("Tool") then continue end
-        local key = generateUniqueKey(tool)
-        if not key then continue end
-
-        local displayName = tool:GetAttribute("DisplayName") or tool.Name
-        local imageId = tool:GetAttribute("ImageId") or "rbxassetid://7072725737"
-        local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
-
-        WeaponDB[key] = {
-            Name = displayName,
-            Rarity = rarity,
-            ImageId = imageId,
-            ToolName = tool.Name,
-            Key = key
-        }
-
-        if imageId and imageId ~= "" and not PreloadedImages[imageId] then
-            PreloadedImages[imageId] = true
-            task.spawn(function()
-                pcall(function()
-                    ContentProvider:PreloadAsync({imageId})
-                end)
-            end)
-        end
-    end
-end
-
-pcall(function()
-    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 5)
-    if itemsFolder then registerItems(itemsFolder) end
-    for _, obj in ipairs(ReplicatedStorage:GetChildren()) do
-        if obj:IsA("Folder") and (obj.Name:find("Weapon") or obj.Name:find("Item") or obj.Name:find("Tool")) then
-            registerItems(obj)
-        end
-    end
-    registerItems(game:GetService("StarterPack"))
-end)
-
-local function getWeaponInfo(tool)
-    if not tool or not tool:IsA("Tool") then return nil end
-    local key = generateUniqueKey(tool)
-    return WeaponDB[key]
-end
-
-local function createBillboardForPlayer(player)
-    if player == LocalPlayer then return end
-
-    local function updateESP()
-        if not ItemESP_Enabled or not player.Character then return end
-
-        local currentTools = {}
-        local function scan(folder)
-            if not folder then return end
-            for _, tool in ipairs(folder:GetChildren()) do
-                if tool:IsA("Tool") and tool.Name ~= "Fists" then
-                    local info = getWeaponInfo(tool)
-                    if info then
-                        table.insert(currentTools, info)
-                    end
-                end
-            end
-        end
-
-        scan(player.Character)
-        local backpack = player:FindFirstChild("Backpack")
-        if backpack then scan(backpack) end
-
-        if not BillboardCache[player] or not BillboardCache[player].Parent then
-            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-
-            local billboard = Instance.new("BillboardGui")
-            billboard.Name = "ItemESP"
-            billboard.Adornee = hrp
-            billboard.Size = UDim2.new(0, 280, 0, 40)
-            billboard.StudsOffset = Vector3.new(0, -6.5, 0)
-            billboard.AlwaysOnTop = true
-            billboard.LightInfluence = 0
-            billboard.Parent = hrp
-
-            local container = Instance.new("Frame", billboard)
-            container.Size = UDim2.new(1,0,1,0)
-            container.BackgroundTransparency = 1
-
-            BillboardCache[player] = billboard
-        end
-
-        -- อัปเดต Tool ภายใน Billboard
-        local container = BillboardCache[player]:FindFirstChildOfClass("Frame")
-        if container then
-            container:ClearAllChildren()
-            local layout = Instance.new("UIGridLayout")
-            layout.CellSize = UDim2.new(0,35,0,35)
-            layout.CellPadding = UDim2.new(0,6,0,0)
-            layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-            layout.VerticalAlignment = Enum.VerticalAlignment.Center
-            layout.SortOrder = Enum.SortOrder.LayoutOrder
-            layout.Parent = container
-
-            for i, info in ipairs(currentTools) do
-                local img = Instance.new("ImageLabel")
-                img.Parent = container
-                img.Size = UDim2.new(0,35,0,35)
-                img.BackgroundTransparency = 1
-                img.Image = info.ImageId or "rbxassetid://7072725737"
-                img.ScaleType = Enum.ScaleType.Fit
-                img.LayoutOrder = i
-                local color = RARITY_COLORS[info.Rarity] or Color3.fromRGB(255,255,255)
-                img.ImageColor3 = color:Lerp(Color3.new(1,1,1),0.35)
-            end
-        end
-    end
-
-    -- อัปเดตทันทีทุก 1 วินาที
-    task.spawn(function()
-        while ItemESP_Enabled and player.Parent do
-            pcall(updateESP)
-            task.wait(1)
-        end
-    end)
-
-    -- เก็บ connection
-    ItemESP_UpdateConnections[player] = {}
-    if player.Character then
-        table.insert(ItemESP_UpdateConnections[player], player.Character.ChildAdded:Connect(function()
-            if ItemESP_Enabled then task.defer(updateESP) end
-        end))
-        table.insert(ItemESP_UpdateConnections[player], player.Character.ChildRemoved:Connect(function()
-            if ItemESP_Enabled then task.defer(updateESP) end
-        end))
-    end
-end
-
--- ฟังก์ชันอัปเดตทุกคน (สร้าง Billboard ใหม่ถ้าหาย)
-local function UpdateAllItemESP()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local hasBillboard = BillboardCache[player] and BillboardCache[player].Parent
-            if ItemESP_Enabled and (not hasBillboard) then
-                createBillboardForPlayer(player)
-            end
-        end
-    end
-end
-
--- Loop อัปเดตทุก 1 วินาที
-task.spawn(function()
-    while true do
-        task.wait(1)
-        UpdateAllItemESP()
-    end
-end)
-
--- Loop สร้าง/รีเฟรช Billboard ใหม่ทุก 20 วินาที
-task.spawn(function()
-    while true do
-        task.wait(20)
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and ItemESP_Enabled then
-                if BillboardCache[player] and BillboardCache[player].Parent then
-                    BillboardCache[player]:Destroy()
-                    BillboardCache[player] = nil
-                end
-                createBillboardForPlayer(player)
-            end
-        end
-    end
-end)
-
--- Player Added/Removed
-Players.PlayerAdded:Connect(function(p)
-    if p ~= LocalPlayer and ItemESP_Enabled then
-        task.wait(0.1)
-        createBillboardForPlayer(p)
-    end
-end)
-Players.PlayerRemoving:Connect(function(p)
-    if BillboardCache[p] then
-        BillboardCache[p]:Destroy()
-        BillboardCache[p] = nil
-    end
-    if ItemESP_UpdateConnections[p] then
-        for _, conn in pairs(ItemESP_UpdateConnections[p]) do
-            if conn.Connected then conn:Disconnect() end
-        end
-        ItemESP_UpdateConnections[p] = nil
-    end
-end)
-
--- WindUI Toggle (สมมติว่า EspTab มีอยู่แล้ว)
-EspTab:Toggle({
-    Title = "Item",
-    Icon = "circle-check",
-    Value = ItemESP_Enabled,
-    Callback = function(state)
-        ItemESP_Enabled = state
-        if state then
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer then
-                    createBillboardForPlayer(p)
-                end
-            end
-        else
-            for p, billboard in pairs(BillboardCache) do
-                if billboard then billboard:Destroy() end
-            end
-            BillboardCache = {}
-            for player, conns in pairs(ItemESP_UpdateConnections) do
-                for _, conn in pairs(conns) do
-                    if conn.Connected then conn:Disconnect() end
-                end
-                ItemESP_UpdateConnections[player] = nil
-            end
-        end
-    end
-})
-
-EspTab:Space()
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-
-local player = Players.LocalPlayer
-local camera = Workspace.CurrentCamera
-
-local ItemESP_Enabled = false
-local ESP_Items = {}
-
--- สีม่วงสว่างแบบเท่ ๆ
-local HIGHLIGHT_COLOR = Color3.fromRGB(200, 0, 255)
-local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
-
--- โฟลเดอร์ของตก (รองรับทั้ง DroppedItem และ DroppedItems)
-local droppedFolder = Workspace:FindFirstChild("DroppedItem") or Workspace:FindFirstChild("DroppedItems")
-if not droppedFolder then
-    warn("ไม่พบโฟลเดอร์ DroppedItem / DroppedItems")
-    return
-end
-
--- ฟังก์ชันสร้าง ESP ให้ไอเทม 1 ชิ้น
-local function createItemESP(item)
-    if not ItemESP_Enabled then return end
-    if ESP_Items[item] then return end  -- ถ้ามีแล้วไม่ทำซ้ำ
-    if item.Name == "Money" then return end  -- ยกเว้น Money
-    if not item:FindFirstChild("Handle") and not item.PrimaryPart then return end
-
-    local handle = item:FindFirstChild("Handle") or item.PrimaryPart
-
-    -- Highlight สีม่วงสว่าง
-    local highlight = Instance.new("Highlight")
-    highlight.FillColor = HIGHLIGHT_COLOR
-    highlight.OutlineColor = HIGHLIGHT_COLOR
-    highlight.FillTransparency = 0.3
-    highlight.OutlineTransparency = 0
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Parent = item
-
-    -- ชื่อไอเทม (Drawing Text)
-    local nameText = Drawing.new("Text")
-    nameText.Size = 10
-    nameText.Color = TEXT_COLOR
-    nameText.Center = true
-    nameText.Outline = true
-    nameText.Font = 2
-    nameText.Visible = true
-    nameText.Text = item.Name
-
-    -- ระยะทาง (Drawing Text)
-    local distanceText = Drawing.new("Text")
-    distanceText.Size = 10
-    distanceText.Color = TEXT_COLOR
-    distanceText.Center = true
-    distanceText.Outline = true
-    distanceText.Font = 2
-    distanceText.Visible = true
-
-    -- เก็บไว้ในตาราง
-    ESP_Items[item] = {
-        highlight = highlight,
-        name = nameText,
-        distance = distanceText,
-        handle = handle
-    }
-
-    -- ลบเมื่อไอเทมหาย
-    item.AncestryChanged:Connect(function()
-        if not item.Parent then
-            if ESP_Items[item] then
-                highlight:Destroy()
-                nameText:Remove()
-                distanceText:Remove()
-                ESP_Items[item] = nil
-            end
-        end
-    end)
-end
-
--- ฟังก์ชันเปิด ESP
-local function enableItemESP()
-    ItemESP_Enabled = true
-    -- สแกนของเดิม
-    for _, item in pairs(droppedFolder:GetChildren()) do
-        if item:IsA("Model") or item:IsA("Tool") or item:IsA("Folder") then
-            task.spawn(function()
-                task.wait(0.3)
-                createItemESP(item)
-            end)
-        end
-    end
-end
-
--- ฟังก์ชันปิด ESP
-local function disableItemESP()
-    ItemESP_Enabled = false
-    for item, data in pairs(ESP_Items) do
-        if data.highlight then data.highlight:Destroy() end
-        if data.name then data.name:Remove() end
-        if data.distance then data.distance:Remove() end
-    end
-    ESP_Items = {}
-end
-
--- อัปเดตตำแหน่งชื่อ + ระยะทางทุกเฟรม
-RunService.Heartbeat:Connect(function()
-    if not ItemESP_Enabled then return end
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
-    local rootPos = player.Character.HumanoidRootPart.Position
-
-    for item, data in pairs(ESP_Items) do
-        if item and item.Parent and data.handle and data.handle.Parent then
-            local worldPos = data.handle.Position + Vector3.new(0, 2, 0)
-            local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
-
-            if onScreen then
-                local screen2D = Vector2.new(screenPos.X, screenPos.Y)
-                local distance = math.floor((rootPos - data.handle.Position).Magnitude)
-
-                data.name.Position = screen2D
-                data.name.Visible = true
-
-                data.distance.Position = screen2D + Vector2.new(0, 18)
-                data.distance.Text = distance .. "m"
-                data.distance.Visible = true
-            else
-                data.name.Visible = false
-                data.distance.Visible = false
-            end
-        else
-
-if data.highlight then data.highlight:Destroy() end
-            if data.name then data.name:Remove() end
-            if data.distance then data.distance:Remove() end
-            ESP_Items[item] = nil
-        end
-    end
-end)
-
-droppedFolder.ChildAdded:Connect(function(item)
-    task.wait(1.5)
-    createItemESP(item)
-end)
-
-EspTab:Toggle({
-    Title = "Dropped Items",
-    Value = ItemESP_Enabled,
-    Callback = function(state)
-        if state then
-            enableItemESP()
-        else
-            disableItemESP()
-        end
-    end
-})
-
-local ESPMoneyEnabledValue = Instance.new("BoolValue")
-ESPMoneyEnabledValue.Name = "ESPMoneyEnabled"
-ESPMoneyEnabledValue.Value = false
-ESPMoneyEnabledValue.Parent = player
-
-local ESP_Money = {}  -- เก็บ Highlight + Drawing สำหรับ Money
-
--- สีเขียว
-local HIGHLIGHT_COLOR = Color3.fromRGB(0, 255, 0)
-local TEXT_COLOR = Color3.fromRGB(0, 255, 0)
-
--- โฟลเดอร์ของ Money
-local droppedFolder = Workspace:FindFirstChild("DroppedItem") or Workspace:FindFirstChild("DroppedItems")
-if not droppedFolder then
-    warn("ไม่พบโฟลเดอร์ DroppedItem / DroppedItems")
-    return
-end
-
--- ฟังก์ชันสร้าง ESP สำหรับ Money 1 ชิ้น
-local function createMoneyESP(item)
-    if ESP_Money[item] then return end
-    if item.Name ~= "Money" then return end
-
-    local mainPart = item:FindFirstChild("Handle") or item.PrimaryPart or item:FindFirstChildOfClass("Part")
-    if not mainPart then return end
-
-    if ESPMoneyEnabledValue.Value then
-        -- Highlight
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "ESP_HIGHLIGHT"
-        highlight.FillColor = HIGHLIGHT_COLOR
-        highlight.OutlineColor = HIGHLIGHT_COLOR
-        highlight.FillTransparency = 0.3
-        highlight.OutlineTransparency = 0
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.Parent = item
-
-        -- ชื่อ Money
-        local nameText = Drawing.new("Text")
-        nameText.Size = 10
-        nameText.Color = TEXT_COLOR
-        nameText.Center = true
-        nameText.Outline = true
-        nameText.Font = 2
-        nameText.Visible = true
-        nameText.Text = item.Name
-
-        ESP_Money[item] = {
-            highlight = highlight,
-            name = nameText,
-            mainPart = mainPart
-        }
-
-        -- ลบเมื่อ Item หาย
-        item.AncestryChanged:Connect(function()
-            if not item.Parent and ESP_Money[item] then
-                if ESP_Money[item].highlight then ESP_Money[item].highlight:Destroy() end
-                if ESP_Money[item].name then ESP_Money[item].name:Remove() end
-                ESP_Money[item] = nil
-            end
-        end)
-    end
-end
-
-RunService.Heartbeat:Connect(function()
-    if not ESPMoneyEnabledValue.Value then return end
-
-    for item, data in pairs(ESP_Money) do
-        if item and item.Parent and data.mainPart and data.mainPart.Parent then
-            local worldPos = data.mainPart.Position + Vector3.new(0, 2, 0)
-            local screenPos, onScreen = Workspace.CurrentCamera:WorldToViewportPoint(worldPos)
-            if onScreen then
-                data.name.Position = Vector2.new(screenPos.X, screenPos.Y)
-                data.name.Visible = true
-            else
-                data.name.Visible = false
-            end
-        else
-            if data.highlight then data.highlight:Destroy() end
-            if data.name then data.name:Remove() end
-            ESP_Money[item] = nil
-        end
-    end
-end)
-
-for _, item in pairs(droppedFolder:GetChildren()) do createMoneyESP(item) end
-
-droppedFolder.ChildAdded:Connect(function(item)
-    task.wait(0.5)
-    createMoneyESP(item)
-end)
-
--- WindUI ปุ่มเปิดปิด ESP Money
-EspTab:Toggle({
-    Title = "ESP Money",
-    Value = ESPMoneyEnabledValue.Value,
-    Callback = function(state)
-        ESPMoneyEnabledValue.Value = state
-
-        if not state then
-            for item, data in pairs(ESP_Money) do
-                if data.highlight then data.highlight:Destroy() end
-                if data.name then data.name:Remove() end
-                ESP_Money[item] = nil
-            end
-        else
-
-            for _, item in pairs(droppedFolder:GetChildren()) do
-                createMoneyESP(item)
-            end
-        end
-    end
-})
