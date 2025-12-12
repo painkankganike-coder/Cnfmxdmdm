@@ -18,7 +18,7 @@ local Window = WindUI:CreateWindow({
 })
 
 Window:Tag({
-    Title = "v0.2.8",
+    Title = "v0.6.8",
     Icon = "cloud",
     Color = Color3.fromHex("#2889F7"),
     Radius = 13,
@@ -36,133 +36,6 @@ local WeaponTab = Window:Tab({Title = "Weapon Mods:", Icon = "crosshair"})
 WeaponTab:Section({Title="Weapon Mods :"})
 local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
 ServerTab:Section({Title="Server Hop  :"})
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local camera = workspace.CurrentCamera
-
-local BOX_COLOR = Color3.fromRGB(255, 255, 255)
-local BOX_THICKNESS = 2
-local SCALE_MULTIPLIER = 1
-
-local espPlayers = {}
-
--- แปลงตำแหน่งโลกเป็นหน้าจอ
-local function worldToViewport(pos)
-    local screen, onScreen = camera:WorldToViewportPoint(pos)
-    return Vector2.new(screen.X, screen.Y), onScreen
-end
-
--- สร้าง Box ESP
-local function createBoxESP(plr, getCurrentTargetFunc)
-    if espPlayers[plr] or plr == LocalPlayer then return end
-
-    local lines = {}
-    for i = 1, 12 do
-        local line = Drawing.new("Line")
-        line.Visible = false
-        line.Color = BOX_COLOR
-        line.Thickness = BOX_THICKNESS
-        line.Transparency = 1
-        lines[i] = line
-    end
-
-    local connection = RunService.RenderStepped:Connect(function()
-        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
-            for _, line in ipairs(lines) do line.Visible = false end
-            return
-        end
-
-        local root = plr.Character.HumanoidRootPart
-        local rootPos = root.Position
-        local scale = root.Size.Y * SCALE_MULTIPLIER
-
-        local corners = {
-            Vector3.new(-1,  2, -1), Vector3.new( 1,  2, -1), Vector3.new( 1,  2,  1), Vector3.new(-1,  2,  1),
-            Vector3.new(-1, -2, -1), Vector3.new( 1, -2, -1), Vector3.new( 1, -2,  1), Vector3.new(-1, -2,  1)
-        }
-
-        local screenCorners = {}
-        local allOnScreen = true
-
-        for i, offset in ipairs(corners) do
-            local worldPos = rootPos + (root.CFrame:VectorToWorldSpace(offset * scale))
-            local screenPos, onScreen = worldToViewport(worldPos)
-            screenCorners[i] = screenPos
-            if not onScreen then allOnScreen = false end
-        end
-
-        if not allOnScreen then
-            for _, line in ipairs(lines) do line.Visible = false end
-            return
-        end
-
-        -- เช็ค CurrentTarget จาก callback
-        local currentTarget = getCurrentTargetFunc()
-        local color = (currentTarget == plr) and Color3.fromRGB(255, 0, 0) or BOX_COLOR
-
-        local edges = {
-            {1,2},{2,3},{3,4},{4,1},
-            {5,6},{6,7},{7,8},{8,5},
-            {1,5},{2,6},{3,7},{4,8}
-        }
-
-        for i, edge in ipairs(edges) do
-            local line = lines[i]
-            line.From = screenCorners[edge[1]]
-            line.To = screenCorners[edge[2]]
-            line.Color = color
-            line.Visible = true
-        end
-    end)
-
-    espPlayers[plr] = {connection = connection, lines = lines}
-end
-
-local function removeBoxESP(plr)
-    if espPlayers[plr] then
-        if espPlayers[plr].connection then espPlayers[plr].connection:Disconnect() end
-        for _, line in ipairs(espPlayers[plr].lines) do line:Remove() end
-        espPlayers[plr] = nil
-    end
-end
-
-local function enableAllESP(getCurrentTargetFunc)
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then createBoxESP(plr, getCurrentTargetFunc) end
-    end
-end
-
-local function disableAllESP()
-    for plr, _ in pairs(espPlayers) do
-        removeBoxESP(plr)
-    end
-end
-
--- Player Added/Removing
-Players.PlayerAdded:Connect(function(plr)
-    task.wait(1)
-    if _G.ESPEnabled then
-        createBoxESP(plr, function() return CurrentTarget end) -- ใช้ CurrentTarget ของ TracerLine
-    end
-end)
-Players.PlayerRemoving:Connect(removeBoxESP)
-
--- ตัวอย่าง Toggle WindUI
-EspTab:Toggle({
-    Title = "Box",
-    Icon = "eye",
-    Default = false,
-    Callback = function(state)
-        _G.ESPEnabled = state
-        if state then
-            enableAllESP(function() return CurrentTarget end) -- callback ให้เช็ค TracerLine ทุกเฟรม
-        else
-            disableAllESP()
-        end
-    end
-})
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
