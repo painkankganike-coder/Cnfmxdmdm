@@ -792,6 +792,924 @@ WeaponTab:Toggle({
     end
 })
 
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local player = Players.LocalPlayer
+local placeId = game.PlaceId
+
+ServerTab:Button({
+    Title = "Copy JobId",
+    Desc = "คัดลอกID server",
+    Callback = function()
+        setclipboard(game.JobId)
+        print("Copied JobId:", game.JobId)
+    end
+})
+
+ServerTab:Divider()
+local jobInput = ""
+ServerTab:Input({
+    Title = "JobId",
+    Desc = "ใส่ ID ที่จะย้ายเข้า",
+    Placeholder = "",
+    Callback = function(text)
+        jobInput = text
+    end
+})
+
+ServerTab:Button({
+    Title = "Join JobId",
+    Callback = function()
+        if jobInput ~= "" then
+            TeleportService:TeleportToPlaceInstance(placeId, jobInput, player)
+        else
+            warn("ใส่ JobId ให้ถูก")
+        end
+    end
+})
+
+local PlaceId = 104715542330896
+local TargetPlayers = 28
+
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = game.Players.LocalPlayer
+
+-- ฟังก์ชันดึงรายชื่อเซิร์ฟเวอร์
+local function GetServers(cursor)
+    local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100%s"):format(
+        PlaceId,
+        cursor and ("&cursor=" .. cursor) or ""
+    )
+
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+
+    return success and result or nil
+end
+
+-- ⭐ ปุ่ม WindUI แบบ Button
+ServerTab:Divider()
+ServerTab:Section({Title="Auto Server Hop  :"})
+ServerTab:Button({
+    Title = "Auto big Server Hop",
+    Desc = "ค้นหาเซิร์ฟที่คน เยอะๆ " .. TargetPlayers,
+    Callback = function()
+        task.spawn(function()
+            print("🔍 เริ่มค้นหาเซิร์ฟคน ≤ " .. TargetPlayers .. "...")
+
+            while true do
+                local cursor = nil
+                local found = false
+
+                repeat
+                    local data = GetServers(cursor)
+                    if not data then break end
+
+                    for _, server in ipairs(data.data) do
+                        local playing = server.playing or 0
+
+                        if playing <= TargetPlayers and playing < server.maxPlayers then
+                            print("📌 เจอเซิร์ฟ:", server.id, " | คน:", playing)
+                            TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
+                            found = true
+                            break
+                        end
+                    end
+
+                    cursor = data.nextPageCursor
+                until cursor == nil or found
+
+                task.wait(0.2)
+            end
+        end)
+    end
+})
+
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+
+function Rejoin()
+    local player = Players.LocalPlayer
+    if not player then return end
+    
+    local placeId = game.PlaceId
+    local jobId = game.JobId
+
+    -- ถ้าเซิร์ฟไม่สามารถ rejoin แบบกลับห้องเดิมได้ จะ teleport ปกติแทน
+    local success, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+    end)
+
+    if not success then
+        warn("Rejoin แบบ instance เดิมล้มเหลว:", err)
+        TeleportService:Teleport(placeId, player)
+    end
+end
+
+ServerTab:Button({
+    Title = "Rejoin ",
+    Desc = "เด็กข้างegg อยากกลับบ้าน",
+    Callback = function()
+        Rejoin()
+    end
+})
+
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+
+local function GetServers(cursor)
+    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    if cursor then
+        url = url .. "&cursor=" .. cursor
+    end
+
+    local success, response = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+
+    if success then
+        return response
+    else
+        warn("Error loading servers:", response)
+        return nil
+    end
+end
+
+function FindLowServer()
+    local cursor = nil
+    local lowestServer = nil
+
+    repeat
+        local servers = GetServers(cursor)
+        if not servers then break end
+
+        for _, server in ipairs(servers.data) do
+            local playing = server.playing or 0
+
+            if playing < server.maxPlayers then
+                -- หาคนน้อยที่สุด
+                if (not lowestServer) or (playing < lowestServer.playing) then
+                    lowestServer = server
+                end
+            end
+        end
+
+        cursor = servers.nextPageCursor
+    until cursor == nil
+
+    if lowestServer then
+        print("🔍 พบเซิร์ฟคนนี้น้อย:", lowestServer.id, " คน:", lowestServer.playing)
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, lowestServer.id, Players.LocalPlayer)
+    else
+        warn("❌ ไม่พบเซิร์ฟที่มีช่องว่าง")
+    end
+end
+
+ServerTab:Button({
+    Title = "small Server",
+    Desc = "หาคนน้อย",
+    Locked = false,
+    Callback = function()
+        FindLowServer()
+    end
+})
+
+local FPSBoostEnabled = false
+
+local Lighting = game:GetService("Lighting")
+local OriginalSky = {}
+local OriginalParts = {}
+
+-- โทนเทาแบบสบายตา
+local grayColor = Color3.fromRGB(180,180,180)
+
+-- บันทึก Sky เดิม
+for _, v in ipairs(Lighting:GetChildren()) do
+    if v:IsA("Sky") then
+        table.insert(OriginalSky, v)
+    end
+end
+
+-- บันทึกข้อมูลของ Part เดิม
+local function SaveOriginal(part)
+    if OriginalParts[part] then return end
+    OriginalParts[part] = {
+        Color = part.Color,
+        Material = part.Material,
+        TextureID = part:IsA("MeshPart") and part.TextureID or nil
+    }
+end
+
+local function BoostFPS_Enable()
+    -- ลบ Sky
+    for _, v in ipairs(Lighting:GetChildren()) do
+        if v:IsA("Sky") then v:Destroy() end
+    end
+
+    -- เปลี่ยนสี + ลบภาพ
+    for _, obj in ipairs(workspace:GetDescendants()) do
+
+        if obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("SurfaceAppearance") then
+            obj:Destroy()
+
+        elseif obj:IsA("BasePart") then
+            SaveOriginal(obj)
+            obj.Color = grayColor
+            obj.Material = Enum.Material.SmoothPlastic
+
+        elseif obj:IsA("MeshPart") then
+            SaveOriginal(obj)
+            obj.TextureID = ""
+            obj.Color = grayColor
+            obj.Material = Enum.Material.SmoothPlastic
+        end
+    end
+end
+
+local function BoostFPS_Disable()
+    -- คืน Sky
+    for _, sky in ipairs(OriginalSky) do
+        sky.Parent = Lighting
+    end
+
+    -- คืนค่าของ Part ทั้งหมด
+    for part, data in pairs(OriginalParts) do
+        if part and part.Parent then
+            part.Color = data.Color
+            part.Material = data.Material
+            if part:IsA("MeshPart") and data.TextureID then
+                part.TextureID = data.TextureID
+            end
+        end
+    end
+end
+ServerTab:Section({Title="Server Mods  :"})
+
+ServerTab:Button({
+    Title = "No sky  (Click)",
+    Desc = "เปิดเพื่อจะเข้าโหมดหนาว และไม่มีก้อนเมฆตึงๆ⚪",
+    Callback = function()
+        FPSBoostEnabled = not FPSBoostEnabled
+        
+        if FPSBoostEnabled then
+            BoostFPS_Enable()
+        else
+            BoostFPS_Disable()
+        end
+    end
+})
+
+ServerTab:Button({
+    Title = "Remove Roads",
+    Desc = "ลบถนนออก🛣️",
+    Callback = function()
+
+        local success, mapFolder = pcall(function()
+            return workspace:WaitForChild("Map", 5)
+        end)
+
+        if not success or not mapFolder then
+            warn("❌ ไม่พบ workspace.Map")
+            return
+        end
+
+        local road = mapFolder:FindFirstChild("RoadNetwork")
+        if road then
+            road:Destroy()
+            print("✅ ลบ RoadNetwork เรียบร้อยแล้ว!")
+        else
+            warn("❌ ไม่พบ Map.RoadNetwork")
+        end
+    end
+})
+
+-- ฟังก์ชันลบประตู DoorSystem และประตูทั้งหมด
+local function removeDoors()
+    pcall(function()
+        -- ลบโฟลเดอร์ DoorSystem
+        if workspace:FindFirstChild("DoorSystem") then
+            workspace.DoorSystem:Destroy()
+        end
+
+        -- ลูปทุกอ็อบเจ็กต์ใน workspace
+        for _, obj in pairs(workspace:GetDescendants()) do
+            local name = obj.Name:lower()
+            local parentName = obj.Parent and obj.Parent.Name:lower() or ""
+            if name:find("door") or parentName:find("door") then
+                if obj:IsA("Model") then
+                    obj:Destroy()
+                elseif obj:IsA("BasePart") then
+                    obj.CanCollide = false
+                    obj.Transparency = 1
+                    if obj:FindFirstChild("ClickDetector") then
+                        obj.ClickDetector.MaxActivationDistance = 0
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- สร้างปุ่ม WindUI สำหรับลบประตู
+ServerTab:Button({
+    Title = "Remove Doors",
+    Desc = "ลบประตูออก🚪",
+    Locked = false,
+    Callback = function()
+        removeDoors()  -- เรียกฟังก์ชันลบประตู
+        print("✅ DoorSystem & all doors removed!")
+    end
+})
+
+
+local SpeedEnabled = false
+local speedMultiplier = 0.10
+local HideNameEnabled = false
+local AntiLookEnabled = false
+local AntiRagdollEnabled = false
+
+
+
+CheaterTab:Slider({
+    Title = "Speed Multiplier :",
+    Value = {Min = 0.00, Max = 0.15, Default = speedMultiplier},
+    Step = 0.05,
+    Callback = function(value)
+        speedMultiplier = value
+    end
+})
+
+
+-- Toggle เปิด/ปิด Speed
+CheaterTab:Toggle({
+    Title = "Speed",
+    Value = SpeedEnabled,
+    Callback = function(state)
+        SpeedEnabled = state
+    end
+})
+
+RunService.RenderStepped:Connect(function(delta)
+    if SpeedEnabled and LocalPlayer.Character then
+        local char = LocalPlayer.Character
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if hum and root then
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+                root.CFrame = root.CFrame + moveDir.Unit * speedMultiplier * delta * 60
+            end
+        end
+    end
+end)
+
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local LocalPlayer = Players.LocalPlayer
+
+local JumpEnabled = false
+local flying = false
+
+-- ค่ากระโดด
+local jumpPower = 25
+local jumpHeight = 25
+local defaultJumpPower = 50
+local defaultJumpHeight = 7.2
+local flySpeed = 45
+
+-- ฟังก์ชันปรับกระโดด
+local function ApplyJump(hum)
+    if hum then
+        hum.JumpPower = jumpPower
+        hum.JumpHeight = jumpHeight
+    end
+end
+
+-- ฟังก์ชันคืนค่าเดิม
+local function RemoveJump(hum)
+    if hum then
+        hum.JumpPower = defaultJumpPower
+        hum.JumpHeight = defaultJumpHeight
+    end
+end
+
+-- อัปเดต Humanoid ใหม่ตอน CharacterAdded
+local function GetHumanoid()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+-- อัปเดต HumanoidRootPart
+local function GetRoot()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+-- จัดการกดกระโดด
+UIS.JumpRequest:Connect(function()
+    if not JumpEnabled then return end
+    flying = true
+    local hum = GetHumanoid()
+    if hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        ApplyJump(hum)
+    end
+end)
+
+-- ปล่อยกระโดดหยุดบิน
+UIS.InputEnded:Connect(function(input)
+    if not JumpEnabled then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType == Enum.UserInputType.Touch then
+        flying = false
+    end
+end)
+
+-- Loop อัปเดตการบินทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    if not JumpEnabled then return end
+    local root = GetRoot()
+    local hum = GetHumanoid()
+    if not root or not hum then return end
+
+    if flying then
+        root.Velocity = Vector3.new(root.Velocity.X, flySpeed, root.Velocity.Z)
+    else
+        -- ใช้แรงดึงตามปกติของเกม
+        root.Velocity = Vector3.new(root.Velocity.X, -30, root.Velocity.Z)
+    end
+end)
+
+-- Toggle เปิด/ปิด Jump+Fly
+CheaterTab:Toggle({
+    Title = "Jump",
+    Value = JumpEnabled,
+    Callback = function(state)
+        JumpEnabled = state
+        local hum = GetHumanoid()
+        if state then
+            ApplyJump(hum)
+        else
+            flying = false
+            RemoveJump(hum)
+        end
+    end
+})
+
+
+
+CheaterTab:Divider()
+
+-- ฟังก์ชันลบ BillboardGui ทุกตัวในตัวละคร
+local function RemoveBillboardGui()
+    local char = LocalPlayer.Character
+    if char then
+        for _, gui in pairs(char:GetDescendants()) do
+            if gui:IsA("BillboardGui") then
+                gui:Destroy()
+            end
+        end
+    end
+end
+
+-- Toggle Hide Name
+CheaterTab:Toggle({
+    Title = "Hide Name",
+    Value = HideNameEnabled,
+    Callback = function(state)
+        HideNameEnabled = state
+        if state then
+            RemoveBillboardGui()
+        end
+    end
+})
+
+-- อัปเดต BillboardGui ทุกเฟรม (Realtime)
+RunService.RenderStepped:Connect(function()
+    if HideNameEnabled and LocalPlayer.Character then
+        for _, gui in pairs(LocalPlayer.Character:GetDescendants()) do
+            if gui:IsA("BillboardGui") then
+                gui:Destroy()
+            end
+        end
+    end
+end)
+
+-- ตรวจจับตอน Spawn ใหม่
+LocalPlayer.CharacterAdded:Connect(function(char)
+    if HideNameEnabled then
+        -- ตรวจสอบทุกตัวลูกที่ถูกสร้างใน Character ใหม่
+        char.DescendantAdded:Connect(function(desc)
+            if desc:IsA("BillboardGui") then
+                desc:Destroy()
+            end
+        end)
+        
+        -- ลบที่มีอยู่แล้วใน Character
+        RemoveBillboardGui()
+    end
+end)
+
+local ANIM_ID = "rbxassetid://104767795538635"
+local currentAnimTrack
+
+local function PlayAntiLook()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local humanoid = char:WaitForChild("Humanoid")
+    local anim = Instance.new("Animation")
+    anim.AnimationId = ANIM_ID
+    currentAnimTrack = humanoid:LoadAnimation(anim)
+    currentAnimTrack.Looped = true
+    currentAnimTrack:Play()
+end
+
+local function StopAntiLook()
+    if currentAnimTrack then
+        currentAnimTrack:Stop()
+        currentAnimTrack = nil
+    end
+end
+
+CheaterTab:Toggle({
+    Title = "Anti Lock",
+    Value = AntiLookEnabled,
+    Callback = function(state)
+        AntiLookEnabled = state
+        if state then PlayAntiLook() else StopAntiLook() end
+    end
+})
+
+-- ตัวแปร
+local UndergroundEnabled = false
+local UndergroundAutoEnabled = true -- toggle เปิด/ปิด
+local UndergroundDepth = 50       -- ความลึก
+local SpinSpeed = 2080            -- ความเร็วหมุนรอบตัว
+local UndergroundAngle = 0        -- มุมหมุน
+
+-- ฟังก์ชันเริ่มมุด
+local function StartUnderground()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    UndergroundEnabled = true
+    local initialY = hrp.Position.Y - UndergroundDepth
+
+    local conn
+    conn = RunService.RenderStepped:Connect(function(delta)
+        if not UndergroundEnabled or not hrp.Parent then
+            if conn then conn:Disconnect() conn = nil end
+            return
+        end
+
+        UndergroundAngle = (UndergroundAngle + SpinSpeed * delta) % 360
+        local rad = math.rad(UndergroundAngle)
+
+        local offsetX = math.cos(rad) * 6 -- รัศมีวงหมุน 6
+        local offsetZ = math.sin(rad) * 6
+        local newPos = Vector3.new(hrp.Position.X + offsetX, initialY, hrp.Position.Z + offsetZ)
+
+        -- หมุนหันไปจุดเดิมกลางตัว
+        hrp.CFrame = CFrame.new(newPos, Vector3.new(hrp.Position.X, initialY, hrp.Position.Z))
+    end)
+end
+
+-- ฟังก์ชันหยุดมุด
+local function StopUnderground()
+    UndergroundEnabled = false
+end
+
+-- ฟังก์ชันตรวจ Anti Ragdoll (ไม่ล้ม)
+local function AntiRagdoll()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not hrp then return end
+    if humanoid.PlatformStand then
+        humanoid.PlatformStand = false
+        humanoid.Sit = false
+        hrp.Velocity = Vector3.new(0,0,0)
+        hrp.RotVelocity = Vector3.new(0,0,0)
+    end
+end
+
+-- อัปเดตทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not humanoid then return end
+
+    -- Underground Auto
+    if UndergroundAutoEnabled then
+        if humanoid.Health < 16 and humanoid.Health > 0 then
+            if not UndergroundEnabled then StartUnderground() end
+        elseif humanoid.Health >= 30 or humanoid.Health <= 0 then
+            if UndergroundEnabled then StopUnderground() end
+        end
+    end
+
+    -- Anti Ragdoll
+    AntiRagdoll()
+end)
+
+-- Toggle ปุ่ม UI
+CheaterTab:Toggle({
+    Title = "Anti Kill",
+    Value = UndergroundAutoEnabled,
+    Callback = function(state)
+        UndergroundAutoEnabled = state
+        if not state then UndergroundEnabled = false end
+    end
+})
+
+-- อัปเดตกรณีตายหรือ Respawn
+Players.LocalPlayer.CharacterAdded:Connect(function(char)
+    if UndergroundAutoEnabled then
+        UndergroundEnabled = false
+    end
+end)
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local CounterTable
+
+-- หา CounterTable
+local function findCounter()
+    for _, obj in ipairs(getgc(true)) do
+        if typeof(obj) == "table" and rawget(obj, "event") and rawget(obj, "func") then
+            return obj
+        end
+    end
+    return nil
+end
+
+-- ฟังก์ชันเริ่ม Anti Ragdoll
+local function startAntiRagdoll()
+    CounterTable = findCounter()
+    if not CounterTable then
+        warn("❌ ไม่พบ CounterTable!")
+        return
+    end
+
+    spawn(function()
+        while AntiRagdollEnabled do
+            CounterTable.event = (CounterTable.event or 0) + 1
+            local SendRemote = ReplicatedStorage.Remotes:WaitForChild("Send")
+            pcall(function()
+                SendRemote:FireServer(CounterTable.event, "end_ragdoll_early")
+            end)
+            wait(0.3)
+
+            if AntiRagdollEnabled then
+                CounterTable.event = (CounterTable.event or 0) + 1
+                pcall(function()
+                    SendRemote:FireServer(CounterTable.event, "clear_ragdoll")
+                end)
+            end
+            wait(0.3)
+        end
+    end)
+end
+
+-- WindUI Toggle
+CheaterTab:Toggle({
+    Title = "Anti Ragdoll",
+    Value = AntiRagdollEnabled,
+    Callback = function(state)
+        AntiRagdollEnabled = state
+        if AntiRagdollEnabled then
+            startAntiRagdoll()
+            print("✅ Anti Ragdoll ON")
+        else
+            print("❌ Anti Ragdoll OFF")
+        end
+    end
+})
+
+-- Auto start เมื่อ respawn
+player.CharacterAdded:Connect(function()
+    if AntiRagdollEnabled then
+        wait(1)
+        startAntiRagdoll()
+    end
+end)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local rootPart = char:WaitForChild("HumanoidRootPart")
+
+-- เก็บสถานะ Toggle ไว้
+local PickupEnabled = false
+
+-- หา CounterTable
+local CounterTable
+pcall(function()
+    for _, Obj in ipairs(getgc(true)) do
+        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
+            CounterTable = Obj
+            break
+        end
+    end
+end)
+
+-- NetGet Function
+local function NetGet(...)
+    if not CounterTable or not CounterTable.func then return end
+    local args = {...}
+    CounterTable.func = (CounterTable.func or 0) + 1
+    local success, result = pcall(function()
+        local GetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Get")
+        return GetRemote:InvokeServer(CounterTable.func, unpack(args))
+    end)
+    if not success then warn("[NetGet Error]", result) end
+    return result
+end
+
+-- ฟังก์ชันตรวจสอบและเก็บไอเท็ม
+local function CheckAndPickup()
+    if not PickupEnabled then return end
+    if not rootPart or not rootPart.Parent then return end
+
+    local droppedFolder = workspace:FindFirstChild("DroppedItems") or workspace:FindFirstChild("DroppedItem")
+    if not droppedFolder then return end
+
+    for _, item in ipairs(droppedFolder:GetChildren()) do
+        if item.Name == "Money" then continue end
+        if item:IsA("Model") and item:FindFirstChildWhichIsA("BasePart") then
+            local success, modelCF = pcall(function()
+                return (item.GetPivot and item:GetPivot() or item:GetModelCFrame())
+            end)
+            if not success or not modelCF then continue end
+            local distance = (rootPart.Position - modelCF.Position).Magnitude
+            if distance <= 15 then
+                pcall(function()
+                    NetGet("pickup_dropped_item", item)
+                end)
+            end
+        end
+    end
+end
+
+-- อัปเดต char ใหม่เมื่อ Spawn / ตาย
+local function UpdateChar(newChar)
+    char = newChar
+    rootPart = char:WaitForChild("HumanoidRootPart")
+end
+
+player.CharacterAdded:Connect(UpdateChar)
+if char then
+    UpdateChar(char)
+end
+
+-- Loop ทุกเฟรม
+RunService.Heartbeat:Connect(CheckAndPickup)
+
+-- WindUI Toggle
+CheaterTab:Toggle({
+    Title = "Pickup Items",
+    Value = PickupEnabled,
+    Callback = function(state)
+        PickupEnabled = state
+        print("🧲 Auto Pickup Items:", state and "ON" or "OFF")
+    end
+})
+
+CheaterTab:Slider({
+    Title = "Stamina :",
+    Step = 1,
+    Value = {
+        Min = 120,
+        Max = 99999,
+        Default = 100,
+    },
+    Callback = function(value)
+        local player = game.Players.LocalPlayer
+        player:SetAttribute("MaxStamina", value)
+        print("[✅] เปลี่ยนค่า MaxStamina =", value)
+    end
+})
+
+CheaterTab:Divider()
+CheaterTab:Section({Title="Snap PC key [ Z ]"})
+
+local SnapHeightOffset = -7
+local SnapDirection = "Down"
+local SnapDuration = 0.1
+local SnapBlockDuration = 3 -- ระยะเวลาบล็อกอยู่
+local isRunning = false
+
+local function SnapQuick()
+    if isRunning then return end
+    isRunning = true
+
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then isRunning=false return end
+
+    -- สร้างบล็อก Neon สีขาวโปร่งแสงรอบตัว
+    local blocks = {}
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") then
+            local blk = Instance.new("Part")
+            blk.Size = part.Size
+            blk.CFrame = part.CFrame
+            blk.Anchored = true
+            blk.CanCollide = false
+            blk.Material = Enum.Material.Neon
+            blk.Transparency = 0.5
+            blk.Color = Color3.fromRGB(255,255,255)
+            blk.Parent = workspace
+            table.insert(blocks, blk)
+        end
+    end
+
+    -- ตั้งเวลาให้ลบบล็อกหลัง 5 วินาที
+    task.spawn(function()
+        task.wait(SnapBlockDuration)
+        for _, blk in ipairs(blocks) do
+            if blk and blk.Parent then blk:Destroy() end
+        end
+    end)
+
+    -- เริ่มมุด
+    hum.Sit = true
+    local origY = hrp.Position.Y
+    local offset = math.abs(SnapHeightOffset)
+    if SnapDirection == "Down" then offset = -offset end
+
+    -- อัพเดทตำแหน่งแบบ real-time ตามตัว
+    local conn
+    conn = RunService.RenderStepped:Connect(function()
+        if hrp and hrp.Parent then
+            hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position.X, origY+offset, hrp.Position.Z),0.8)
+
+            -- อัพเดทบล็อกให้ตามตัวตลอดเวลา
+            for i, part in ipairs(char:GetChildren()) do
+                if part:IsA("BasePart") and blocks[i] then
+                    local blk = blocks[i]
+                    if blk and blk.Parent then
+                        blk.CFrame = part.CFrame
+                    end
+                end
+            end
+        end
+    end)
+
+    task.wait(SnapDuration)
+    if conn then conn:Disconnect() conn=nil end
+    hum.Sit = false
+    isRunning=false
+end
+
+-- ปุ่มและ Hotkey
+CheaterTab:Button({
+    Title="Snap Click",
+    Locked=false,
+    Callback=function() SnapQuick() end
+})
+
+CheaterTab:Slider({
+    Title="Snap Depth",
+    Step=1,
+    Value={Min=1,Max=50,Default=math.abs(SnapHeightOffset)},
+    Callback=function(val)
+        SnapHeightOffset=(SnapDirection=="Down" and -1 or 1)*val
+    end
+})
+
+CheaterTab:Dropdown({
+    Title="Snap Direction",
+    Values={"Down","Up"},
+    Value=SnapDirection,
+    Callback=function(opt)
+        SnapDirection=opt
+        SnapHeightOffset=(opt=="Down" and -1 or 1)*math.abs(SnapHeightOffset)
+    end
+})
+
+UserInputService.InputBegan:Connect(function(input,gpe)
+    if gpe then return end
+    if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
+end)
+
 local Players = game:GetService("Players")  
 local RunService = game:GetService("RunService")  
 local Workspace = game:GetService("Workspace")  
@@ -1718,935 +2636,16 @@ EspTab:Toggle({
         ESPMoneyEnabledValue.Value = state
 
         if not state then
-            -- ปิด → ลบทั้งหมด
             for item, data in pairs(ESP_Money) do
                 if data.highlight then data.highlight:Destroy() end
                 if data.name then data.name:Remove() end
                 ESP_Money[item] = nil
             end
         else
-            -- เปิด → สร้างใหม่ทั้งหมด
+
             for _, item in pairs(droppedFolder:GetChildren()) do
                 createMoneyESP(item)
             end
         end
     end
 })
-
-local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
-local player = Players.LocalPlayer
-local placeId = game.PlaceId
-
-ServerTab:Button({
-    Title = "Copy JobId",
-    Desc = "คัดลอกID server",
-    Callback = function()
-        setclipboard(game.JobId)
-        print("Copied JobId:", game.JobId)
-    end
-})
-
-ServerTab:Divider()
-local jobInput = ""
-ServerTab:Input({
-    Title = "JobId",
-    Desc = "ใส่ ID ที่จะย้ายเข้า",
-    Placeholder = "",
-    Callback = function(text)
-        jobInput = text
-    end
-})
-
-ServerTab:Button({
-    Title = "Join JobId",
-    Callback = function()
-        if jobInput ~= "" then
-            TeleportService:TeleportToPlaceInstance(placeId, jobInput, player)
-        else
-            warn("ใส่ JobId ให้ถูก")
-        end
-    end
-})
-
-local PlaceId = 104715542330896
-local TargetPlayers = 28
-
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local LocalPlayer = game.Players.LocalPlayer
-
--- ฟังก์ชันดึงรายชื่อเซิร์ฟเวอร์
-local function GetServers(cursor)
-    local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100%s"):format(
-        PlaceId,
-        cursor and ("&cursor=" .. cursor) or ""
-    )
-
-    local success, result = pcall(function()
-        return HttpService:JSONDecode(game:HttpGet(url))
-    end)
-
-    return success and result or nil
-end
-
--- ⭐ ปุ่ม WindUI แบบ Button
-ServerTab:Divider()
-ServerTab:Section({Title="Auto Server Hop  :"})
-ServerTab:Button({
-    Title = "Auto big Server Hop",
-    Desc = "ค้นหาเซิร์ฟที่คน เยอะๆ " .. TargetPlayers,
-    Callback = function()
-        task.spawn(function()
-            print("🔍 เริ่มค้นหาเซิร์ฟคน ≤ " .. TargetPlayers .. "...")
-
-            while true do
-                local cursor = nil
-                local found = false
-
-                repeat
-                    local data = GetServers(cursor)
-                    if not data then break end
-
-                    for _, server in ipairs(data.data) do
-                        local playing = server.playing or 0
-
-                        if playing <= TargetPlayers and playing < server.maxPlayers then
-                            print("📌 เจอเซิร์ฟ:", server.id, " | คน:", playing)
-                            TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
-                            found = true
-                            break
-                        end
-                    end
-
-                    cursor = data.nextPageCursor
-                until cursor == nil or found
-
-                task.wait(0.2)
-            end
-        end)
-    end
-})
-
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
-
-function Rejoin()
-    local player = Players.LocalPlayer
-    if not player then return end
-    
-    local placeId = game.PlaceId
-    local jobId = game.JobId
-
-    -- ถ้าเซิร์ฟไม่สามารถ rejoin แบบกลับห้องเดิมได้ จะ teleport ปกติแทน
-    local success, err = pcall(function()
-        TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
-    end)
-
-    if not success then
-        warn("Rejoin แบบ instance เดิมล้มเหลว:", err)
-        TeleportService:Teleport(placeId, player)
-    end
-end
-
-ServerTab:Button({
-    Title = "Rejoin ",
-    Desc = "เด็กข้างegg อยากกลับบ้าน",
-    Callback = function()
-        Rejoin()
-    end
-})
-
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
-
-local function GetServers(cursor)
-    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-    if cursor then
-        url = url .. "&cursor=" .. cursor
-    end
-
-    local success, response = pcall(function()
-        return HttpService:JSONDecode(game:HttpGet(url))
-    end)
-
-    if success then
-        return response
-    else
-        warn("Error loading servers:", response)
-        return nil
-    end
-end
-
-function FindLowServer()
-    local cursor = nil
-    local lowestServer = nil
-
-    repeat
-        local servers = GetServers(cursor)
-        if not servers then break end
-
-        for _, server in ipairs(servers.data) do
-            local playing = server.playing or 0
-
-            if playing < server.maxPlayers then
-                -- หาคนน้อยที่สุด
-                if (not lowestServer) or (playing < lowestServer.playing) then
-                    lowestServer = server
-                end
-            end
-        end
-
-        cursor = servers.nextPageCursor
-    until cursor == nil
-
-    if lowestServer then
-        print("🔍 พบเซิร์ฟคนนี้น้อย:", lowestServer.id, " คน:", lowestServer.playing)
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, lowestServer.id, Players.LocalPlayer)
-    else
-        warn("❌ ไม่พบเซิร์ฟที่มีช่องว่าง")
-    end
-end
-
-ServerTab:Button({
-    Title = "small Server",
-    Desc = "หาคนน้อย",
-    Locked = false,
-    Callback = function()
-        FindLowServer()
-    end
-})
-
-local FPSBoostEnabled = false
-
-local Lighting = game:GetService("Lighting")
-local OriginalSky = {}
-local OriginalParts = {}
-
--- โทนเทาแบบสบายตา
-local grayColor = Color3.fromRGB(180,180,180)
-
--- บันทึก Sky เดิม
-for _, v in ipairs(Lighting:GetChildren()) do
-    if v:IsA("Sky") then
-        table.insert(OriginalSky, v)
-    end
-end
-
--- บันทึกข้อมูลของ Part เดิม
-local function SaveOriginal(part)
-    if OriginalParts[part] then return end
-    OriginalParts[part] = {
-        Color = part.Color,
-        Material = part.Material,
-        TextureID = part:IsA("MeshPart") and part.TextureID or nil
-    }
-end
-
-local function BoostFPS_Enable()
-    -- ลบ Sky
-    for _, v in ipairs(Lighting:GetChildren()) do
-        if v:IsA("Sky") then v:Destroy() end
-    end
-
-    -- เปลี่ยนสี + ลบภาพ
-    for _, obj in ipairs(workspace:GetDescendants()) do
-
-        if obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("SurfaceAppearance") then
-            obj:Destroy()
-
-        elseif obj:IsA("BasePart") then
-            SaveOriginal(obj)
-            obj.Color = grayColor
-            obj.Material = Enum.Material.SmoothPlastic
-
-        elseif obj:IsA("MeshPart") then
-            SaveOriginal(obj)
-            obj.TextureID = ""
-            obj.Color = grayColor
-            obj.Material = Enum.Material.SmoothPlastic
-        end
-    end
-end
-
-local function BoostFPS_Disable()
-    -- คืน Sky
-    for _, sky in ipairs(OriginalSky) do
-        sky.Parent = Lighting
-    end
-
-    -- คืนค่าของ Part ทั้งหมด
-    for part, data in pairs(OriginalParts) do
-        if part and part.Parent then
-            part.Color = data.Color
-            part.Material = data.Material
-            if part:IsA("MeshPart") and data.TextureID then
-                part.TextureID = data.TextureID
-            end
-        end
-    end
-end
-ServerTab:Section({Title="Server Mods  :"})
-
-ServerTab:Button({
-    Title = "No sky  (Click)",
-    Desc = "เปิดเพื่อจะเข้าโหมดหนาว และไม่มีก้อนเมฆตึงๆ⚪",
-    Callback = function()
-        FPSBoostEnabled = not FPSBoostEnabled
-        
-        if FPSBoostEnabled then
-            BoostFPS_Enable()
-        else
-            BoostFPS_Disable()
-        end
-    end
-})
-
-ServerTab:Button({
-    Title = "Remove Roads",
-    Desc = "ลบถนนออก🛣️",
-    Callback = function()
-
-        local success, mapFolder = pcall(function()
-            return workspace:WaitForChild("Map", 5)
-        end)
-
-        if not success or not mapFolder then
-            warn("❌ ไม่พบ workspace.Map")
-            return
-        end
-
-        local road = mapFolder:FindFirstChild("RoadNetwork")
-        if road then
-            road:Destroy()
-            print("✅ ลบ RoadNetwork เรียบร้อยแล้ว!")
-        else
-            warn("❌ ไม่พบ Map.RoadNetwork")
-        end
-    end
-})
-
--- ฟังก์ชันลบประตู DoorSystem และประตูทั้งหมด
-local function removeDoors()
-    pcall(function()
-        -- ลบโฟลเดอร์ DoorSystem
-        if workspace:FindFirstChild("DoorSystem") then
-            workspace.DoorSystem:Destroy()
-        end
-
-        -- ลูปทุกอ็อบเจ็กต์ใน workspace
-        for _, obj in pairs(workspace:GetDescendants()) do
-            local name = obj.Name:lower()
-            local parentName = obj.Parent and obj.Parent.Name:lower() or ""
-            if name:find("door") or parentName:find("door") then
-                if obj:IsA("Model") then
-                    obj:Destroy()
-                elseif obj:IsA("BasePart") then
-                    obj.CanCollide = false
-                    obj.Transparency = 1
-                    if obj:FindFirstChild("ClickDetector") then
-                        obj.ClickDetector.MaxActivationDistance = 0
-                    end
-                end
-            end
-        end
-    end)
-end
-
--- สร้างปุ่ม WindUI สำหรับลบประตู
-ServerTab:Button({
-    Title = "Remove Doors",
-    Desc = "ลบประตูออก🚪",
-    Locked = false,
-    Callback = function()
-        removeDoors()  -- เรียกฟังก์ชันลบประตู
-        print("✅ DoorSystem & all doors removed!")
-    end
-})
-
-
-local SpeedEnabled = false
-local speedMultiplier = 0.10
-local HideNameEnabled = false
-local AntiLookEnabled = false
-local AntiRagdollEnabled = false
-
-
-
-CheaterTab:Slider({
-    Title = "Speed Multiplier :",
-    Value = {Min = 0.00, Max = 0.15, Default = speedMultiplier},
-    Step = 0.05,
-    Callback = function(value)
-        speedMultiplier = value
-    end
-})
-
-
--- Toggle เปิด/ปิด Speed
-CheaterTab:Toggle({
-    Title = "Speed",
-    Value = SpeedEnabled,
-    Callback = function(state)
-        SpeedEnabled = state
-    end
-})
-
-RunService.RenderStepped:Connect(function(delta)
-    if SpeedEnabled and LocalPlayer.Character then
-        local char = LocalPlayer.Character
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if hum and root then
-            local moveDir = hum.MoveDirection
-            if moveDir.Magnitude > 0 then
-                root.CFrame = root.CFrame + moveDir.Unit * speedMultiplier * delta * 60
-            end
-        end
-    end
-end)
-
-local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-
-local LocalPlayer = Players.LocalPlayer
-
-local JumpEnabled = false
-local flying = false
-
--- ค่ากระโดด
-local jumpPower = 25
-local jumpHeight = 25
-local defaultJumpPower = 50
-local defaultJumpHeight = 7.2
-local flySpeed = 45
-
--- ฟังก์ชันปรับกระโดด
-local function ApplyJump(hum)
-    if hum then
-        hum.JumpPower = jumpPower
-        hum.JumpHeight = jumpHeight
-    end
-end
-
--- ฟังก์ชันคืนค่าเดิม
-local function RemoveJump(hum)
-    if hum then
-        hum.JumpPower = defaultJumpPower
-        hum.JumpHeight = defaultJumpHeight
-    end
-end
-
--- อัปเดต Humanoid ใหม่ตอน CharacterAdded
-local function GetHumanoid()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    return char:FindFirstChildOfClass("Humanoid")
-end
-
--- อัปเดต HumanoidRootPart
-local function GetRoot()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
-end
-
--- จัดการกดกระโดด
-UIS.JumpRequest:Connect(function()
-    if not JumpEnabled then return end
-    flying = true
-    local hum = GetHumanoid()
-    if hum then
-        hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        ApplyJump(hum)
-    end
-end)
-
--- ปล่อยกระโดดหยุดบิน
-UIS.InputEnded:Connect(function(input)
-    if not JumpEnabled then return end
-    if input.UserInputType == Enum.UserInputType.Keyboard or input.UserInputType == Enum.UserInputType.Touch then
-        flying = false
-    end
-end)
-
--- Loop อัปเดตการบินทุกเฟรม
-RunService.RenderStepped:Connect(function()
-    if not JumpEnabled then return end
-    local root = GetRoot()
-    local hum = GetHumanoid()
-    if not root or not hum then return end
-
-    if flying then
-        root.Velocity = Vector3.new(root.Velocity.X, flySpeed, root.Velocity.Z)
-    else
-        -- ใช้แรงดึงตามปกติของเกม
-        root.Velocity = Vector3.new(root.Velocity.X, -30, root.Velocity.Z)
-    end
-end)
-
--- Toggle เปิด/ปิด Jump+Fly
-CheaterTab:Toggle({
-    Title = "Jump",
-    Value = JumpEnabled,
-    Callback = function(state)
-        JumpEnabled = state
-        local hum = GetHumanoid()
-        if state then
-            ApplyJump(hum)
-        else
-            flying = false
-            RemoveJump(hum)
-        end
-    end
-})
-
-
-
-CheaterTab:Divider()
-
--- ฟังก์ชันลบ BillboardGui ทุกตัวในตัวละคร
-local function RemoveBillboardGui()
-    local char = LocalPlayer.Character
-    if char then
-        for _, gui in pairs(char:GetDescendants()) do
-            if gui:IsA("BillboardGui") then
-                gui:Destroy()
-            end
-        end
-    end
-end
-
--- Toggle Hide Name
-CheaterTab:Toggle({
-    Title = "Hide Name",
-    Value = HideNameEnabled,
-    Callback = function(state)
-        HideNameEnabled = state
-        if state then
-            RemoveBillboardGui()
-        end
-    end
-})
-
--- อัปเดต BillboardGui ทุกเฟรม (Realtime)
-RunService.RenderStepped:Connect(function()
-    if HideNameEnabled and LocalPlayer.Character then
-        for _, gui in pairs(LocalPlayer.Character:GetDescendants()) do
-            if gui:IsA("BillboardGui") then
-                gui:Destroy()
-            end
-        end
-    end
-end)
-
--- ตรวจจับตอน Spawn ใหม่
-LocalPlayer.CharacterAdded:Connect(function(char)
-    if HideNameEnabled then
-        -- ตรวจสอบทุกตัวลูกที่ถูกสร้างใน Character ใหม่
-        char.DescendantAdded:Connect(function(desc)
-            if desc:IsA("BillboardGui") then
-                desc:Destroy()
-            end
-        end)
-        
-        -- ลบที่มีอยู่แล้วใน Character
-        RemoveBillboardGui()
-    end
-end)
-
-local ANIM_ID = "rbxassetid://104767795538635"
-local currentAnimTrack
-
-local function PlayAntiLook()
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local humanoid = char:WaitForChild("Humanoid")
-    local anim = Instance.new("Animation")
-    anim.AnimationId = ANIM_ID
-    currentAnimTrack = humanoid:LoadAnimation(anim)
-    currentAnimTrack.Looped = true
-    currentAnimTrack:Play()
-end
-
-local function StopAntiLook()
-    if currentAnimTrack then
-        currentAnimTrack:Stop()
-        currentAnimTrack = nil
-    end
-end
-
-CheaterTab:Toggle({
-    Title = "Anti Lock",
-    Value = AntiLookEnabled,
-    Callback = function(state)
-        AntiLookEnabled = state
-        if state then PlayAntiLook() else StopAntiLook() end
-    end
-})
-
--- ตัวแปร
-local UndergroundEnabled = false
-local UndergroundAutoEnabled = true -- toggle เปิด/ปิด
-local UndergroundDepth = 50       -- ความลึก
-local SpinSpeed = 2080            -- ความเร็วหมุนรอบตัว
-local UndergroundAngle = 0        -- มุมหมุน
-
--- ฟังก์ชันเริ่มมุด
-local function StartUnderground()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    UndergroundEnabled = true
-    local initialY = hrp.Position.Y - UndergroundDepth
-
-    local conn
-    conn = RunService.RenderStepped:Connect(function(delta)
-        if not UndergroundEnabled or not hrp.Parent then
-            if conn then conn:Disconnect() conn = nil end
-            return
-        end
-
-        UndergroundAngle = (UndergroundAngle + SpinSpeed * delta) % 360
-        local rad = math.rad(UndergroundAngle)
-
-        local offsetX = math.cos(rad) * 6 -- รัศมีวงหมุน 6
-        local offsetZ = math.sin(rad) * 6
-        local newPos = Vector3.new(hrp.Position.X + offsetX, initialY, hrp.Position.Z + offsetZ)
-
-        -- หมุนหันไปจุดเดิมกลางตัว
-        hrp.CFrame = CFrame.new(newPos, Vector3.new(hrp.Position.X, initialY, hrp.Position.Z))
-    end)
-end
-
--- ฟังก์ชันหยุดมุด
-local function StopUnderground()
-    UndergroundEnabled = false
-end
-
--- ฟังก์ชันตรวจ Anti Ragdoll (ไม่ล้ม)
-local function AntiRagdoll()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not humanoid or not hrp then return end
-    if humanoid.PlatformStand then
-        humanoid.PlatformStand = false
-        humanoid.Sit = false
-        hrp.Velocity = Vector3.new(0,0,0)
-        hrp.RotVelocity = Vector3.new(0,0,0)
-    end
-end
-
--- อัปเดตทุกเฟรม
-RunService.RenderStepped:Connect(function()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local humanoid = char:FindFirstChild("Humanoid")
-    if not humanoid then return end
-
-    -- Underground Auto
-    if UndergroundAutoEnabled then
-        if humanoid.Health < 16 and humanoid.Health > 0 then
-            if not UndergroundEnabled then StartUnderground() end
-        elseif humanoid.Health >= 30 or humanoid.Health <= 0 then
-            if UndergroundEnabled then StopUnderground() end
-        end
-    end
-
-    -- Anti Ragdoll
-    AntiRagdoll()
-end)
-
--- Toggle ปุ่ม UI
-CheaterTab:Toggle({
-    Title = "Anti Kill",
-    Value = UndergroundAutoEnabled,
-    Callback = function(state)
-        UndergroundAutoEnabled = state
-        if not state then UndergroundEnabled = false end
-    end
-})
-
--- อัปเดตกรณีตายหรือ Respawn
-Players.LocalPlayer.CharacterAdded:Connect(function(char)
-    if UndergroundAutoEnabled then
-        UndergroundEnabled = false
-    end
-end)
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local player = Players.LocalPlayer
-
-local CounterTable
-
--- หา CounterTable
-local function findCounter()
-    for _, obj in ipairs(getgc(true)) do
-        if typeof(obj) == "table" and rawget(obj, "event") and rawget(obj, "func") then
-            return obj
-        end
-    end
-    return nil
-end
-
--- ฟังก์ชันเริ่ม Anti Ragdoll
-local function startAntiRagdoll()
-    CounterTable = findCounter()
-    if not CounterTable then
-        warn("❌ ไม่พบ CounterTable!")
-        return
-    end
-
-    spawn(function()
-        while AntiRagdollEnabled do
-            CounterTable.event = (CounterTable.event or 0) + 1
-            local SendRemote = ReplicatedStorage.Remotes:WaitForChild("Send")
-            pcall(function()
-                SendRemote:FireServer(CounterTable.event, "end_ragdoll_early")
-            end)
-            wait(0.3)
-
-            if AntiRagdollEnabled then
-                CounterTable.event = (CounterTable.event or 0) + 1
-                pcall(function()
-                    SendRemote:FireServer(CounterTable.event, "clear_ragdoll")
-                end)
-            end
-            wait(0.3)
-        end
-    end)
-end
-
--- WindUI Toggle
-CheaterTab:Toggle({
-    Title = "Anti Ragdoll",
-    Value = AntiRagdollEnabled,
-    Callback = function(state)
-        AntiRagdollEnabled = state
-        if AntiRagdollEnabled then
-            startAntiRagdoll()
-            print("✅ Anti Ragdoll ON")
-        else
-            print("❌ Anti Ragdoll OFF")
-        end
-    end
-})
-
--- Auto start เมื่อ respawn
-player.CharacterAdded:Connect(function()
-    if AntiRagdollEnabled then
-        wait(1)
-        startAntiRagdoll()
-    end
-end)
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local player = Players.LocalPlayer
-local char = player.Character or player.CharacterAdded:Wait()
-local rootPart = char:WaitForChild("HumanoidRootPart")
-
--- เก็บสถานะ Toggle ไว้
-local PickupEnabled = false
-
--- หา CounterTable
-local CounterTable
-pcall(function()
-    for _, Obj in ipairs(getgc(true)) do
-        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
-            CounterTable = Obj
-            break
-        end
-    end
-end)
-
--- NetGet Function
-local function NetGet(...)
-    if not CounterTable or not CounterTable.func then return end
-    local args = {...}
-    CounterTable.func = (CounterTable.func or 0) + 1
-    local success, result = pcall(function()
-        local GetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Get")
-        return GetRemote:InvokeServer(CounterTable.func, unpack(args))
-    end)
-    if not success then warn("[NetGet Error]", result) end
-    return result
-end
-
--- ฟังก์ชันตรวจสอบและเก็บไอเท็ม
-local function CheckAndPickup()
-    if not PickupEnabled then return end
-    if not rootPart or not rootPart.Parent then return end
-
-    local droppedFolder = workspace:FindFirstChild("DroppedItems") or workspace:FindFirstChild("DroppedItem")
-    if not droppedFolder then return end
-
-    for _, item in ipairs(droppedFolder:GetChildren()) do
-        if item.Name == "Money" then continue end
-        if item:IsA("Model") and item:FindFirstChildWhichIsA("BasePart") then
-            local success, modelCF = pcall(function()
-                return (item.GetPivot and item:GetPivot() or item:GetModelCFrame())
-            end)
-            if not success or not modelCF then continue end
-            local distance = (rootPart.Position - modelCF.Position).Magnitude
-            if distance <= 15 then
-                pcall(function()
-                    NetGet("pickup_dropped_item", item)
-                end)
-            end
-        end
-    end
-end
-
--- อัปเดต char ใหม่เมื่อ Spawn / ตาย
-local function UpdateChar(newChar)
-    char = newChar
-    rootPart = char:WaitForChild("HumanoidRootPart")
-end
-
-player.CharacterAdded:Connect(UpdateChar)
-if char then
-    UpdateChar(char)
-end
-
--- Loop ทุกเฟรม
-RunService.Heartbeat:Connect(CheckAndPickup)
-
--- WindUI Toggle
-CheaterTab:Toggle({
-    Title = "Pickup Items",
-    Value = PickupEnabled,
-    Callback = function(state)
-        PickupEnabled = state
-        print("🧲 Auto Pickup Items:", state and "ON" or "OFF")
-    end
-})
-
-CheaterTab:Slider({
-    Title = "Stamina :",
-    Step = 1,
-    Value = {
-        Min = 120,
-        Max = 99999,
-        Default = 100,
-    },
-    Callback = function(value)
-        local player = game.Players.LocalPlayer
-        player:SetAttribute("MaxStamina", value)
-        print("[✅] เปลี่ยนค่า MaxStamina =", value)
-    end
-})
-
-CheaterTab:Divider()
-CheaterTab:Section({Title="Snap PC key [ Z ]"})
-
-local SnapHeightOffset = -7
-local SnapDirection = "Down"
-local SnapDuration = 0.1
-local SnapBlockDuration = 3 -- ระยะเวลาบล็อกอยู่
-local isRunning = false
-
-local function SnapQuick()
-    if isRunning then return end
-    isRunning = true
-
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then isRunning=false return end
-
-    -- สร้างบล็อก Neon สีขาวโปร่งแสงรอบตัว
-    local blocks = {}
-    for _, part in ipairs(char:GetChildren()) do
-        if part:IsA("BasePart") then
-            local blk = Instance.new("Part")
-            blk.Size = part.Size
-            blk.CFrame = part.CFrame
-            blk.Anchored = true
-            blk.CanCollide = false
-            blk.Material = Enum.Material.Neon
-            blk.Transparency = 0.5
-            blk.Color = Color3.fromRGB(255,255,255)
-            blk.Parent = workspace
-            table.insert(blocks, blk)
-        end
-    end
-
-    -- ตั้งเวลาให้ลบบล็อกหลัง 5 วินาที
-    task.spawn(function()
-        task.wait(SnapBlockDuration)
-        for _, blk in ipairs(blocks) do
-            if blk and blk.Parent then blk:Destroy() end
-        end
-    end)
-
-    -- เริ่มมุด
-    hum.Sit = true
-    local origY = hrp.Position.Y
-    local offset = math.abs(SnapHeightOffset)
-    if SnapDirection == "Down" then offset = -offset end
-
-    -- อัพเดทตำแหน่งแบบ real-time ตามตัว
-    local conn
-    conn = RunService.RenderStepped:Connect(function()
-        if hrp and hrp.Parent then
-            hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position.X, origY+offset, hrp.Position.Z),0.8)
-
-            -- อัพเดทบล็อกให้ตามตัวตลอดเวลา
-            for i, part in ipairs(char:GetChildren()) do
-                if part:IsA("BasePart") and blocks[i] then
-                    local blk = blocks[i]
-                    if blk and blk.Parent then
-                        blk.CFrame = part.CFrame
-                    end
-                end
-            end
-        end
-    end)
-
-    task.wait(SnapDuration)
-    if conn then conn:Disconnect() conn=nil end
-    hum.Sit = false
-    isRunning=false
-end
-
--- ปุ่มและ Hotkey
-CheaterTab:Button({
-    Title="Snap Click",
-    Locked=false,
-    Callback=function() SnapQuick() end
-})
-
-CheaterTab:Slider({
-    Title="Snap Depth",
-    Step=1,
-    Value={Min=1,Max=50,Default=math.abs(SnapHeightOffset)},
-    Callback=function(val)
-        SnapHeightOffset=(SnapDirection=="Down" and -1 or 1)*val
-    end
-})
-
-CheaterTab:Dropdown({
-    Title="Snap Direction",
-    Values={"Down","Up"},
-    Value=SnapDirection,
-    Callback=function(opt)
-        SnapDirection=opt
-        SnapHeightOffset=(opt=="Down" and -1 or 1)*math.abs(SnapHeightOffset)
-    end
-})
-
-UserInputService.InputBegan:Connect(function(input,gpe)
-    if gpe then return end
-    if input.KeyCode==Enum.KeyCode.Z then SnapQuick() end
-end)
