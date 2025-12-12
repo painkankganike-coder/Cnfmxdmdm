@@ -772,7 +772,7 @@ local function createMoneyESP(item)
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.Parent = item
 
-        -- ชื่อ
+        -- ชื่อ Money
         local nameText = Drawing.new("Text")
         nameText.Size = 10
         nameText.Color = TEXT_COLOR
@@ -821,8 +821,10 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- สแกน Item เก่า + ใหม่
+-- สแกน Item เก่า
 for _, item in pairs(droppedFolder:GetChildren()) do createMoneyESP(item) end
+
+-- เมื่อมี Money ใหม่เข้ามา
 droppedFolder.ChildAdded:Connect(function(item)
     task.wait(0.5)
     createMoneyESP(item)
