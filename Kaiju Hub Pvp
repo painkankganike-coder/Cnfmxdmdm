@@ -652,7 +652,9 @@ local SCALE_MULTIPLIER = 1
 -- Table เก็บ ESP
 local espPlayers = {}
 _G.ESPEnabled = false
-local CurrentTarget = nil -- ให้เชื่อมกับระบบ Tracer / Silent Aim ของคุณ
+
+-- ตัวแปรล็อกเป้า (จากระบบ Silent Aim / Tracer ของคุณ)
+local CurrentTarget = nil
 
 -- แปลงตำแหน่งโลกเป็นหน้าจอ
 local function worldToViewport(pos)
@@ -772,7 +774,6 @@ EspTab:Toggle({
     end
 })
 
--- อัปเดตสีทุกเฟรมตาม CurrentTarget (ถ้าอยากให้ Target อัตโนมัติ)
 RunService.RenderStepped:Connect(function()
     if not _G.ESPEnabled then return end
     for plr, data in pairs(espPlayers) do
@@ -782,7 +783,6 @@ RunService.RenderStepped:Connect(function()
         end
     end
 end)
-
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
