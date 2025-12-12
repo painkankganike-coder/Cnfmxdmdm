@@ -375,6 +375,423 @@ CombatTab:Button({
     end
 })
 
+MiscTab:Keybind({
+    Title = "Keybind",
+    Value = "G",
+    Callback = function(v)
+        Window:SetToggleKey(Enum.KeyCode[v])
+    end
+})
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+
+-- หา CounterTable จาก getgc
+local CounterTable
+pcall(function()
+    for _, Obj in ipairs(getgc(true)) do
+        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
+            CounterTable = Obj
+            break
+        end
+    end
+end)
+
+-- Net.get Function
+local Net = {}
+local function NetGet(...)
+    if not CounterTable or not CounterTable.func then
+        warn("❌ CounterTable ไม่พบ!")
+        return
+    end
+    local args = {...}
+    CounterTable.func = (CounterTable.func or 0) + 1
+    local success, result = pcall(function()
+        local GetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Get")
+        return GetRemote:InvokeServer(CounterTable.func, unpack(args))
+    end)
+    if not success then
+        warn("[NetGet Error]", result)
+    end
+    return result
+end
+function Net.get(...)
+    return NetGet(...)
+end
+
+-- Claim All Function
+local function ClaimAllQuests()
+    local success, questFrame = pcall(function()
+        return player:WaitForChild("PlayerGui"):WaitForChild("Quests"):WaitForChild("QuestsHolder"):WaitForChild("QuestsScrollingFrame")
+    end)
+    if not success or not questFrame then
+        warn("❌ Quest GUI ไม่พบ! (ยังไม่เปิด Quests)")
+        return 0
+    end
+    
+    local claimed = 0
+    for _, child in ipairs(questFrame:GetChildren()) do
+        if (child:IsA("Frame") or child:IsA("TextButton") or child:IsA("ImageButton")) and child.Name ~= "" then
+            pcall(function()
+                Net.get("claim_quest", child.Name)
+            end)
+            claimed = claimed + 1
+            task.wait(0.2)
+        end
+    end
+    return claimed
+end
+
+MiscTab:Button({
+    Title = "Claim All Quests",
+    Locked = false,
+    Callback = function()
+        local claimed = ClaimAllQuests()  -- เรียกฟังก์ชัน ClaimAllQuests
+        if claimed > 0 then
+            print("✅ Claimed", claimed, "Quests!")
+        else
+            print("ℹ️ ไม่มี Quest ให้ Claim")
+        end
+    end
+})
+
+MiscTab:Space()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local PingGui = Instance.new("ScreenGui")
+PingGui.Name = "PingDisplay"
+PingGui.ResetOnSpawn = false
+PingGui.Parent = PlayerGui
+PingGui.DisplayOrder = 999
+PingGui.Enabled = false -- เริ่มปิด
+
+local pingLabel = Instance.new("TextLabel")
+pingLabel.Size = UDim2.new(0, 120, 0, 30)
+pingLabel.Position = UDim2.new(0, 10, 0, 10) -- มุมซ้ายบน
+pingLabel.BackgroundTransparency = 1
+pingLabel.Font = Enum.Font.SourceSansBold
+pingLabel.TextSize = 18
+pingLabel.TextXAlignment = Enum.TextXAlignment.Left
+pingLabel.TextYAlignment = Enum.TextYAlignment.Top
+pingLabel.Text = "Ping: 0 ms"
+pingLabel.Parent = PingGui
+
+local pingStroke = Instance.new("UIStroke")
+pingStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+pingStroke.Color = Color3.fromRGB(0,0,0)
+pingStroke.Thickness = 2
+pingStroke.Parent = pingLabel
+
+local ShowPing = false
+
+local FpsGui = Instance.new("ScreenGui")
+FpsGui.Name = "FPSDisplay"
+FpsGui.ResetOnSpawn = false
+FpsGui.Parent = PlayerGui
+FpsGui.DisplayOrder = 999
+FpsGui.Enabled = false -- เริ่มปิด
+
+local fpsLabel = Instance.new("TextLabel")
+fpsLabel.Size = UDim2.new(0, 120, 0, 30)
+fpsLabel.Position = UDim2.new(0, 10, 0, 25) -- อยู่ใต้ Ping
+fpsLabel.BackgroundTransparency = 1
+fpsLabel.Font = Enum.Font.SourceSansBold
+fpsLabel.TextSize = 18
+fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
+fpsLabel.TextYAlignment = Enum.TextYAlignment.Top
+fpsLabel.Text = "FPS: 0"
+fpsLabel.Parent = FpsGui
+
+local fpsStroke = Instance.new("UIStroke")
+fpsStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+fpsStroke.Color = Color3.fromRGB(0,0,0)
+fpsStroke.Thickness = 2
+fpsStroke.Parent = fpsLabel
+
+local ShowFPS = false
+local lastTime = tick()
+local frameCount = 0
+
+RunService.RenderStepped:Connect(function()
+    -- Ping
+    if ShowPing then
+        local ping = math.floor(LocalPlayer:GetNetworkPing() * 1000)
+        pingLabel.Text = "Ping: "..ping.." ms"
+        if ping > 100 then
+            pingLabel.TextColor3 = Color3.fromRGB(255,0,0) -- แดง
+        elseif ping >= 70 and ping <= 80 then
+            pingLabel.TextColor3 = Color3.fromRGB(255,255,0) -- เหลือง
+        elseif ping < 60 then
+            pingLabel.TextColor3 = Color3.fromRGB(0,255,0) -- เขียว
+        else
+            pingLabel.TextColor3 = Color3.fromRGB(255,165,0) -- ส้ม
+        end
+    end
+
+    -- FPS
+    if ShowFPS then
+        frameCount = frameCount + 1
+        local currentTime = tick()
+        if currentTime - lastTime >= 1 then
+            fpsLabel.Text = "FPS: " .. frameCount
+            -- เปลี่ยนสี FPS
+            if frameCount < 30 then
+                fpsLabel.TextColor3 = Color3.fromRGB(255,0,0) -- แดง
+            elseif frameCount >= 30 and frameCount <= 60 then
+                fpsLabel.TextColor3 = Color3.fromRGB(255,255,0) -- เหลือง
+            else
+                fpsLabel.TextColor3 = Color3.fromRGB(0,255,0) -- เขียว
+            end
+            frameCount = 0
+            lastTime = currentTime
+        end
+    end
+end)
+
+
+
+MiscTab:Toggle({
+    Title = "Show Ping",
+    Value = false,
+    Callback = function(state)
+        ShowPing = state
+        PingGui.Enabled = state
+    end
+})
+
+MiscTab:Toggle({
+    Title = "Show FPS",
+    Value = false,
+    Callback = function(state)
+        ShowFPS = state
+        FpsGui.Enabled = state
+    end
+})
+
+MiscTab:Code({
+    Title = "My discord Server :",
+    Code = [[ tiktok : KAIJN X HUB 
+discord : https://discord.gg/j7tzEVZP67]]
+})
+
+local FireRateValue = Instance.new("NumberValue")
+FireRateValue.Name = "FireRateValue"
+FireRateValue.Value = 1200
+FireRateValue.Parent = LocalPlayer
+
+WeaponTab:Slider({
+    Title = "Fire Rate",
+    Step = 1,
+    Value = {Min = 1, Max = 3000, Default = FireRateValue.Value},
+    Callback = function(value)
+        FireRateValue.Value = value
+    end
+})
+
+-- เก็บ Tool ที่อัปเดตแล้ว
+local updatedTools = {}
+
+local function UpdateToolFireRate(tool)
+    if not tool then return end
+    if updatedTools[tool] then return end -- ถ้าเคยอัปเดตแล้วไม่ส่งซ้ำ
+    updatedTools[tool] = true
+
+    for _, v in pairs(getgc(true)) do
+        if typeof(v) == "table" and rawget(v, "states") then
+            local s = v.states
+            if s.instance == tool then
+                if s.fire_rate and s.fire_rate.set then
+                    s.fire_rate:set(FireRateValue.Value)
+                    print("✅ Fire Rate updated for Tool:", tool.Name)
+                end
+            end
+        end
+    end
+end
+
+-- ตรวจจับ Tool ใหม่ตอนถือ
+LocalPlayer.Character.ChildAdded:Connect(function(child)
+    if child:IsA("Tool") then
+        UpdateToolFireRate(child)
+    end
+end)
+
+-- ตรวจสอบ Tool ที่ถืออยู่ตอนโหลด
+task.spawn(function()
+    local char = LocalPlayer.Character
+    if char then
+        for _, tool in pairs(char:GetChildren()) do
+            if tool:IsA("Tool") then
+                UpdateToolFireRate(tool)
+            end
+        end
+    end
+end)
+
+-- No Recoil
+local GunModule = require(ReplicatedStorage.Modules.Game.ItemTypes.Gun)
+getgenv().NoRecoilEnabled = false
+local original_recoil = GunModule.apply_recoil
+local antiLoop = nil
+
+local function EnableNoRecoil()
+    if getgenv().NoRecoilEnabled then return end
+    getgenv().NoRecoilEnabled = true
+
+    GunModule.apply_recoil = function(arg1)
+        if arg1 and arg1.instance then
+            arg1.instance:SetAttribute("Recoil", 0)
+        end
+    end
+
+    antiLoop = task.spawn(function()
+        while getgenv().NoRecoilEnabled do
+            local char = LocalPlayer.Character
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            if tool and tool:GetAttribute("Recoil") then
+                tool:SetAttribute("Recoil", 0)
+            end
+            for _, gun in pairs(getgc(true)) do
+                if typeof(gun) == "table" and rawget(gun, "instance") and gun.instance then
+                    gun.instance:SetAttribute("Recoil", 0)
+                end
+            end
+            task.wait(0.3)
+        end
+    end)
+    print("✅ No Recoil: ON")
+end
+
+local function DisableNoRecoil()
+    if not getgenv().NoRecoilEnabled then return end
+    getgenv().NoRecoilEnabled = false
+    GunModule.apply_recoil = original_recoil
+    if antiLoop then
+        task.cancel(antiLoop)
+        antiLoop = nil
+    end
+    print("❌ No Recoil: OFF")
+end
+
+function ToggleNoRecoil(state)
+    if state then EnableNoRecoil() else DisableNoRecoil() end
+end
+
+WeaponTab:Toggle({
+    Title = "No Recoil",
+    Value = false,
+    Callback = function(state)
+        ToggleNoRecoil(state)
+    end
+})
+
+-- Hit Aura
+WeaponTab:Section({Title="Auto Hit :"})
+getgenv().HitAuraEnabled = false
+local autoLoop = nil
+
+local function getActiveTool()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    for _, obj in pairs(char:GetChildren()) do
+        if obj:IsA("Tool") then return obj end
+    end
+    return nil
+end
+
+local function getPlayersInRange(radius)
+    local inRange = {}
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return inRange end
+    local pos = char.HumanoidRootPart.Position
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            local dist = (p.Character.HumanoidRootPart.Position - pos).Magnitude
+            if dist <= radius then
+                table.insert(inRange, p)
+            end
+        end
+    end
+    return inRange
+end
+
+local function AttackNearby()
+    local tool = getActiveTool()
+    if not tool then return end
+    local targets = getPlayersInRange(12)
+    for _, target in ipairs(targets) do
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        local targetHRP = target.Character.HumanoidRootPart
+        if hrp and targetHRP then
+            local lookAtCFrame = CFrame.lookAt(hrp.Position, targetHRP.Position)
+            local CounterTable
+            pcall(function()
+                for _, Obj in ipairs(getgc(true)) do
+                    if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
+                        CounterTable = Obj
+                        break
+                    end
+                end
+            end)
+            local SendRemote
+            pcall(function()
+                local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+                SendRemote = Remotes:WaitForChild("Send", 5)
+            end)
+            if CounterTable and SendRemote then
+                CounterTable.event = (CounterTable.event or 0) + 1
+                pcall(function()
+                    SendRemote:FireServer(CounterTable.event, "melee_attack", tool, {target}, lookAtCFrame, 0.75)
+                end)
+            end
+        end
+    end
+end
+
+local function StartHitAura()
+    if autoLoop then return end
+    autoLoop = task.spawn(function()
+        while getgenv().HitAuraEnabled do
+            pcall(AttackNearby)
+            task.wait(0.3)
+        end
+    end)
+end
+
+local function StopHitAura()
+    getgenv().HitAuraEnabled = false
+    if autoLoop then
+        task.cancel(autoLoop)
+        autoLoop = nil
+    end
+end
+
+function ToggleHitAura(state)
+    if state then
+        getgenv().HitAuraEnabled = true
+        StartHitAura()
+        print("✅ Hit Aura: ON")
+    else
+        StopHitAura()
+        print("❌ Hit Aura: OFF")
+    end
+end
+
+WeaponTab:Toggle({
+    Title = "Hit Aura",
+    Default = false,
+    Callback = function(state)
+        ToggleHitAura(state)
+    end
+})
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
@@ -1187,423 +1604,6 @@ EspTab:Toggle({
                 createMoneyESP(item)
             end
         end
-    end
-})
-
-MiscTab:Keybind({
-    Title = "Keybind",
-    Value = "G",
-    Callback = function(v)
-        Window:SetToggleKey(Enum.KeyCode[v])
-    end
-})
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local player = Players.LocalPlayer
-
--- หา CounterTable จาก getgc
-local CounterTable
-pcall(function()
-    for _, Obj in ipairs(getgc(true)) do
-        if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
-            CounterTable = Obj
-            break
-        end
-    end
-end)
-
--- Net.get Function
-local Net = {}
-local function NetGet(...)
-    if not CounterTable or not CounterTable.func then
-        warn("❌ CounterTable ไม่พบ!")
-        return
-    end
-    local args = {...}
-    CounterTable.func = (CounterTable.func or 0) + 1
-    local success, result = pcall(function()
-        local GetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Get")
-        return GetRemote:InvokeServer(CounterTable.func, unpack(args))
-    end)
-    if not success then
-        warn("[NetGet Error]", result)
-    end
-    return result
-end
-function Net.get(...)
-    return NetGet(...)
-end
-
--- Claim All Function
-local function ClaimAllQuests()
-    local success, questFrame = pcall(function()
-        return player:WaitForChild("PlayerGui"):WaitForChild("Quests"):WaitForChild("QuestsHolder"):WaitForChild("QuestsScrollingFrame")
-    end)
-    if not success or not questFrame then
-        warn("❌ Quest GUI ไม่พบ! (ยังไม่เปิด Quests)")
-        return 0
-    end
-    
-    local claimed = 0
-    for _, child in ipairs(questFrame:GetChildren()) do
-        if (child:IsA("Frame") or child:IsA("TextButton") or child:IsA("ImageButton")) and child.Name ~= "" then
-            pcall(function()
-                Net.get("claim_quest", child.Name)
-            end)
-            claimed = claimed + 1
-            task.wait(0.2)
-        end
-    end
-    return claimed
-end
-
-MiscTab:Button({
-    Title = "Claim All Quests",
-    Locked = false,
-    Callback = function()
-        local claimed = ClaimAllQuests()  -- เรียกฟังก์ชัน ClaimAllQuests
-        if claimed > 0 then
-            print("✅ Claimed", claimed, "Quests!")
-        else
-            print("ℹ️ ไม่มี Quest ให้ Claim")
-        end
-    end
-})
-
-MiscTab:Space()
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-
-local PingGui = Instance.new("ScreenGui")
-PingGui.Name = "PingDisplay"
-PingGui.ResetOnSpawn = false
-PingGui.Parent = PlayerGui
-PingGui.DisplayOrder = 999
-PingGui.Enabled = false -- เริ่มปิด
-
-local pingLabel = Instance.new("TextLabel")
-pingLabel.Size = UDim2.new(0, 120, 0, 30)
-pingLabel.Position = UDim2.new(0, 10, 0, 10) -- มุมซ้ายบน
-pingLabel.BackgroundTransparency = 1
-pingLabel.Font = Enum.Font.SourceSansBold
-pingLabel.TextSize = 18
-pingLabel.TextXAlignment = Enum.TextXAlignment.Left
-pingLabel.TextYAlignment = Enum.TextYAlignment.Top
-pingLabel.Text = "Ping: 0 ms"
-pingLabel.Parent = PingGui
-
-local pingStroke = Instance.new("UIStroke")
-pingStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-pingStroke.Color = Color3.fromRGB(0,0,0)
-pingStroke.Thickness = 2
-pingStroke.Parent = pingLabel
-
-local ShowPing = false
-
-local FpsGui = Instance.new("ScreenGui")
-FpsGui.Name = "FPSDisplay"
-FpsGui.ResetOnSpawn = false
-FpsGui.Parent = PlayerGui
-FpsGui.DisplayOrder = 999
-FpsGui.Enabled = false -- เริ่มปิด
-
-local fpsLabel = Instance.new("TextLabel")
-fpsLabel.Size = UDim2.new(0, 120, 0, 30)
-fpsLabel.Position = UDim2.new(0, 10, 0, 25) -- อยู่ใต้ Ping
-fpsLabel.BackgroundTransparency = 1
-fpsLabel.Font = Enum.Font.SourceSansBold
-fpsLabel.TextSize = 18
-fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
-fpsLabel.TextYAlignment = Enum.TextYAlignment.Top
-fpsLabel.Text = "FPS: 0"
-fpsLabel.Parent = FpsGui
-
-local fpsStroke = Instance.new("UIStroke")
-fpsStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-fpsStroke.Color = Color3.fromRGB(0,0,0)
-fpsStroke.Thickness = 2
-fpsStroke.Parent = fpsLabel
-
-local ShowFPS = false
-local lastTime = tick()
-local frameCount = 0
-
-RunService.RenderStepped:Connect(function()
-    -- Ping
-    if ShowPing then
-        local ping = math.floor(LocalPlayer:GetNetworkPing() * 1000)
-        pingLabel.Text = "Ping: "..ping.." ms"
-        if ping > 100 then
-            pingLabel.TextColor3 = Color3.fromRGB(255,0,0) -- แดง
-        elseif ping >= 70 and ping <= 80 then
-            pingLabel.TextColor3 = Color3.fromRGB(255,255,0) -- เหลือง
-        elseif ping < 60 then
-            pingLabel.TextColor3 = Color3.fromRGB(0,255,0) -- เขียว
-        else
-            pingLabel.TextColor3 = Color3.fromRGB(255,165,0) -- ส้ม
-        end
-    end
-
-    -- FPS
-    if ShowFPS then
-        frameCount = frameCount + 1
-        local currentTime = tick()
-        if currentTime - lastTime >= 1 then
-            fpsLabel.Text = "FPS: " .. frameCount
-            -- เปลี่ยนสี FPS
-            if frameCount < 30 then
-                fpsLabel.TextColor3 = Color3.fromRGB(255,0,0) -- แดง
-            elseif frameCount >= 30 and frameCount <= 60 then
-                fpsLabel.TextColor3 = Color3.fromRGB(255,255,0) -- เหลือง
-            else
-                fpsLabel.TextColor3 = Color3.fromRGB(0,255,0) -- เขียว
-            end
-            frameCount = 0
-            lastTime = currentTime
-        end
-    end
-end)
-
-
-
-MiscTab:Toggle({
-    Title = "Show Ping",
-    Value = false,
-    Callback = function(state)
-        ShowPing = state
-        PingGui.Enabled = state
-    end
-})
-
-MiscTab:Toggle({
-    Title = "Show FPS",
-    Value = false,
-    Callback = function(state)
-        ShowFPS = state
-        FpsGui.Enabled = state
-    end
-})
-
-MiscTab:Code({
-    Title = "My discord Server :",
-    Code = [[ tiktok : KAIJN X HUB 
-discord : https://discord.gg/j7tzEVZP67]]
-})
-
-local FireRateValue = Instance.new("NumberValue")
-FireRateValue.Name = "FireRateValue"
-FireRateValue.Value = 1200
-FireRateValue.Parent = LocalPlayer
-
-WeaponTab:Slider({
-    Title = "Fire Rate",
-    Step = 1,
-    Value = {Min = 1, Max = 3000, Default = FireRateValue.Value},
-    Callback = function(value)
-        FireRateValue.Value = value
-    end
-})
-
--- เก็บ Tool ที่อัปเดตแล้ว
-local updatedTools = {}
-
-local function UpdateToolFireRate(tool)
-    if not tool then return end
-    if updatedTools[tool] then return end -- ถ้าเคยอัปเดตแล้วไม่ส่งซ้ำ
-    updatedTools[tool] = true
-
-    for _, v in pairs(getgc(true)) do
-        if typeof(v) == "table" and rawget(v, "states") then
-            local s = v.states
-            if s.instance == tool then
-                if s.fire_rate and s.fire_rate.set then
-                    s.fire_rate:set(FireRateValue.Value)
-                    print("✅ Fire Rate updated for Tool:", tool.Name)
-                end
-            end
-        end
-    end
-end
-
--- ตรวจจับ Tool ใหม่ตอนถือ
-LocalPlayer.Character.ChildAdded:Connect(function(child)
-    if child:IsA("Tool") then
-        UpdateToolFireRate(child)
-    end
-end)
-
--- ตรวจสอบ Tool ที่ถืออยู่ตอนโหลด
-task.spawn(function()
-    local char = LocalPlayer.Character
-    if char then
-        for _, tool in pairs(char:GetChildren()) do
-            if tool:IsA("Tool") then
-                UpdateToolFireRate(tool)
-            end
-        end
-    end
-end)
-
--- No Recoil
-local GunModule = require(ReplicatedStorage.Modules.Game.ItemTypes.Gun)
-getgenv().NoRecoilEnabled = false
-local original_recoil = GunModule.apply_recoil
-local antiLoop = nil
-
-local function EnableNoRecoil()
-    if getgenv().NoRecoilEnabled then return end
-    getgenv().NoRecoilEnabled = true
-
-    GunModule.apply_recoil = function(arg1)
-        if arg1 and arg1.instance then
-            arg1.instance:SetAttribute("Recoil", 0)
-        end
-    end
-
-    antiLoop = task.spawn(function()
-        while getgenv().NoRecoilEnabled do
-            local char = LocalPlayer.Character
-            local tool = char and char:FindFirstChildOfClass("Tool")
-            if tool and tool:GetAttribute("Recoil") then
-                tool:SetAttribute("Recoil", 0)
-            end
-            for _, gun in pairs(getgc(true)) do
-                if typeof(gun) == "table" and rawget(gun, "instance") and gun.instance then
-                    gun.instance:SetAttribute("Recoil", 0)
-                end
-            end
-            task.wait(0.3)
-        end
-    end)
-    print("✅ No Recoil: ON")
-end
-
-local function DisableNoRecoil()
-    if not getgenv().NoRecoilEnabled then return end
-    getgenv().NoRecoilEnabled = false
-    GunModule.apply_recoil = original_recoil
-    if antiLoop then
-        task.cancel(antiLoop)
-        antiLoop = nil
-    end
-    print("❌ No Recoil: OFF")
-end
-
-function ToggleNoRecoil(state)
-    if state then EnableNoRecoil() else DisableNoRecoil() end
-end
-
-WeaponTab:Toggle({
-    Title = "No Recoil",
-    Value = false,
-    Callback = function(state)
-        ToggleNoRecoil(state)
-    end
-})
-
--- Hit Aura
-WeaponTab:Section({Title="Auto Hit :"})
-getgenv().HitAuraEnabled = false
-local autoLoop = nil
-
-local function getActiveTool()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    for _, obj in pairs(char:GetChildren()) do
-        if obj:IsA("Tool") then return obj end
-    end
-    return nil
-end
-
-local function getPlayersInRange(radius)
-    local inRange = {}
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return inRange end
-    local pos = char.HumanoidRootPart.Position
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart")
-            and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-            local dist = (p.Character.HumanoidRootPart.Position - pos).Magnitude
-            if dist <= radius then
-                table.insert(inRange, p)
-            end
-        end
-    end
-    return inRange
-end
-
-local function AttackNearby()
-    local tool = getActiveTool()
-    if not tool then return end
-    local targets = getPlayersInRange(12)
-    for _, target in ipairs(targets) do
-        local hrp = LocalPlayer.Character.HumanoidRootPart
-        local targetHRP = target.Character.HumanoidRootPart
-        if hrp and targetHRP then
-            local lookAtCFrame = CFrame.lookAt(hrp.Position, targetHRP.Position)
-            local CounterTable
-            pcall(function()
-                for _, Obj in ipairs(getgc(true)) do
-                    if typeof(Obj) == "table" and rawget(Obj, "event") and rawget(Obj, "func") then
-                        CounterTable = Obj
-                        break
-                    end
-                end
-            end)
-            local SendRemote
-            pcall(function()
-                local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
-                SendRemote = Remotes:WaitForChild("Send", 5)
-            end)
-            if CounterTable and SendRemote then
-                CounterTable.event = (CounterTable.event or 0) + 1
-                pcall(function()
-                    SendRemote:FireServer(CounterTable.event, "melee_attack", tool, {target}, lookAtCFrame, 0.75)
-                end)
-            end
-        end
-    end
-end
-
-local function StartHitAura()
-    if autoLoop then return end
-    autoLoop = task.spawn(function()
-        while getgenv().HitAuraEnabled do
-            pcall(AttackNearby)
-            task.wait(0.3)
-        end
-    end)
-end
-
-local function StopHitAura()
-    getgenv().HitAuraEnabled = false
-    if autoLoop then
-        task.cancel(autoLoop)
-        autoLoop = nil
-    end
-end
-
-function ToggleHitAura(state)
-    if state then
-        getgenv().HitAuraEnabled = true
-        StartHitAura()
-        print("✅ Hit Aura: ON")
-    else
-        StopHitAura()
-        print("❌ Hit Aura: OFF")
-    end
-end
-
-WeaponTab:Toggle({
-    Title = "Hit Aura",
-    Default = false,
-    Callback = function(state)
-        ToggleHitAura(state)
     end
 })
 
