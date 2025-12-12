@@ -375,19 +375,6 @@ CombatTab:Button({
     end
 })
 
-
-
--- อัปเดตสีทุกเฟรมตาม CurrentTarget (ถ้าอยากให้ Target อัตโนมัติ)
-RunService.RenderStepped:Connect(function()
-    if not _G.ESPEnabled then return end
-    for plr, data in pairs(espPlayers) do
-        local color = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
-        for _, line in ipairs(data.lines) do
-            line.Color = color
-        end
-    end
-end)
-
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
