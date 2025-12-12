@@ -1716,17 +1716,14 @@ local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer  
 local camera = Workspace.CurrentCamera  
 
--- Config  
 local BOX_COLOR = Color3.fromRGB(255, 255, 255)  
 local BOX_THICKNESS = 2  
 local SCALE_MULTIPLIER = 1  
 
--- Table เก็บ ESP แต่ละคน  
 local espPlayers = {}  
 
 local CurrentTarget = nil
 
--- แปลงตำแหน่งโลกเป็นหน้าจอ  
 local function worldToViewport(pos)  
     local screen, onScreen = camera:WorldToViewportPoint(pos)  
     return Vector2.new(screen.X, screen.Y), onScreen  
@@ -1824,7 +1821,6 @@ Players.PlayerRemoving:Connect(removeBoxESP)
 
 EspTab:Toggle({  
     Title = "Box",  
-    Icon = "eye",  
     Default = false,  
     Callback = function(state)  
         _G.ESPEnabled = state  
@@ -1840,7 +1836,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 
--- BoolValue สำหรับเปิด/ปิด ESP
 local ESPNameEnabled = Instance.new("BoolValue")
 ESPNameEnabled.Name = "ESPNameEnabled"
 ESPNameEnabled.Value = false
@@ -1851,7 +1846,7 @@ ESPDistanceEnabled.Name = "ESPDistanceEnabled"
 ESPDistanceEnabled.Value = false
 ESPDistanceEnabled.Parent = LocalPlayer
 
-local espDistanceTable = {} -- เก็บ GUI ระยะของแต่ละผู้เล่น
+local espDistanceTable = {}
 
 -- ฟังก์ชันสร้าง/อัพเดท ESP Name
 local function UpdateNameESP()
@@ -1892,7 +1887,6 @@ local function UpdateNameESP()
     end
 end
 
--- ฟังก์ชันสร้าง/อัพเดท Distance ESP
 local function UpdateDistanceESP()
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local localPos = LocalPlayer.Character.HumanoidRootPart.Position
@@ -1940,7 +1934,6 @@ local function UpdateDistanceESP()
     end
 end
 
--- Loop อัพเดททุก 1 วินาที
 task.spawn(function()
     while true do
         task.wait(1)
@@ -1985,9 +1978,6 @@ EspTab:Toggle({
     end
 })
 
-
-
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -1998,7 +1988,7 @@ ESPHealthEnabled.Name = "ESPHealthEnabled"
 ESPHealthEnabled.Value = false
 ESPHealthEnabled.Parent = LocalPlayer
 
-local healthBars = {} -- เก็บ GUI ของแต่ละผู้เล่น
+local healthBars = {}
 
 -- ฟังก์ชันสร้าง Health Bar แนวนอน
 local function CreateHealthBar(plr)
@@ -2019,7 +2009,6 @@ local function CreateHealthBar(plr)
     bar.LightInfluence = 0
     bar.Parent = plr.Character
 
-    -- พื้นหลังสีดำ
     local bg = Instance.new("Frame")
     bg.Size = UDim2.new(1,0,1,0)
     bg.Position = UDim2.new(0,0,0,0)
@@ -2027,11 +2016,10 @@ local function CreateHealthBar(plr)
     bg.BorderSizePixel = 0
     bg.Parent = bar
 
-    -- Bar หลัก
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1,0,1,0)
     frame.Position = UDim2.new(0,0,0,0)
-    frame.BackgroundColor3 = Color3.fromRGB(144,238,144) -- เขียวอ่อนเริ่มต้น
+    frame.BackgroundColor3 = Color3.fromRGB(144,238,144)
     frame.BorderSizePixel = 0
     frame.Parent = bg
 
@@ -2073,7 +2061,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ผู้เล่นใหม่
 Players.PlayerAdded:Connect(function(plr)
     task.wait(0.5)
     if ESPHealthEnabled.Value then
@@ -2081,7 +2068,6 @@ Players.PlayerAdded:Connect(function(plr)
     end
 end)
 
--- ผู้เล่นออก
 Players.PlayerRemoving:Connect(function(plr)
     if healthBars[plr] then
         healthBars[plr].bar:Destroy()
@@ -2089,7 +2075,6 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 
--- WindUI Toggle
 EspTab:Toggle({
     Title = "Health",
     Default = false,
@@ -2112,11 +2097,11 @@ local PreloadedImages = {}
 
 local RARITY_COLORS = {
     ["Common"] = Color3.fromRGB(230, 224, 224),
-    ["Uncommon"] = Color3.fromRGB(200, 230, 200),
-    ["Rare"] = Color3.fromRGB(160, 200, 255),
-    ["Epic"] = Color3.fromRGB(200, 160, 255),
-    ["Legendary"] = Color3.fromRGB(255, 200, 120),
-    ["Omega"] = Color3.fromRGB(255, 120, 120),
+    ["Uncommon"] = Color3.fromRGB(230, 224, 224),
+    ["Rare"] = Color3.fromRGB(230, 224, 224),
+    ["Epic"] = Color3.fromRGB(230, 224, 224),
+    ["Legendary"] = Color3.fromRGB(230, 224, 224),
+    ["Omega"] = Color3.fromRGB(230, 224, 224),
 }
 
 -- ฟังก์ชันสร้าง key ของ Tool
@@ -2150,7 +2135,6 @@ local function generateUniqueKey(tool)
     return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
 end
 
--- ลงทะเบียน Tool ทั้งหมด
 local function registerItems(folder)
     for _, tool in ipairs(folder:GetDescendants()) do
         if not tool:IsA("Tool") then continue end
@@ -2197,7 +2181,6 @@ local function getWeaponInfo(tool)
     return WeaponDB[key]
 end
 
--- สร้าง Billboard สำหรับผู้เล่น
 local function createBillboardForPlayer(player)
     if player == LocalPlayer then return end
 
@@ -2221,7 +2204,6 @@ local function createBillboardForPlayer(player)
         local backpack = player:FindFirstChild("Backpack")
         if backpack then scan(backpack) end
 
-        -- ถ้า Billboard หายหรือยังไม่มี สร้างใหม่
         if not BillboardCache[player] or not BillboardCache[player].Parent then
             local hrp = player.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
@@ -2381,8 +2363,8 @@ local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
-local ItemESP_Enabled = false  -- ตัวแปรเปิดปิด ESP
-local ESP_Items = {}  -- เก็บ Highlight + Drawing ของแต่ละไอเทม
+local ItemESP_Enabled = false
+local ESP_Items = {}
 
 -- สีม่วงสว่างแบบเท่ ๆ
 local HIGHLIGHT_COLOR = Color3.fromRGB(200, 0, 255)
@@ -2504,8 +2486,8 @@ RunService.Heartbeat:Connect(function()
                 data.distance.Visible = false
             end
         else
-            -- ลบถ้าไอเทมหาย
-            if data.highlight then data.highlight:Destroy() end
+
+if data.highlight then data.highlight:Destroy() end
             if data.name then data.name:Remove() end
             if data.distance then data.distance:Remove() end
             ESP_Items[item] = nil
@@ -2513,13 +2495,11 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- เมื่อมีของตกใหม่
 droppedFolder.ChildAdded:Connect(function(item)
     task.wait(1.5)
     createItemESP(item)
 end)
 
--- ตัวอย่าง WindUI Toggle
 EspTab:Toggle({
     Title = "Dropped Items",
     Value = ItemESP_Enabled,
@@ -2532,7 +2512,6 @@ EspTab:Toggle({
     end
 })
 
--- ตัวแปรเปิด/ปิด ESP Money
 local ESPMoneyEnabledValue = Instance.new("BoolValue")
 ESPMoneyEnabledValue.Name = "ESPMoneyEnabled"
 ESPMoneyEnabledValue.Value = false
@@ -2597,7 +2576,6 @@ local function createMoneyESP(item)
     end
 end
 
--- อัปเดตตำแหน่งทุกเฟรม
 RunService.Heartbeat:Connect(function()
     if not ESPMoneyEnabledValue.Value then return end
 
@@ -2619,10 +2597,8 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- สแกน Item เก่า
 for _, item in pairs(droppedFolder:GetChildren()) do createMoneyESP(item) end
 
--- เมื่อมี Money ใหม่เข้ามา
 droppedFolder.ChildAdded:Connect(function(item)
     task.wait(0.5)
     createMoneyESP(item)
