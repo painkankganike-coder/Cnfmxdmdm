@@ -717,7 +717,7 @@ end)
 
 -- เมื่อมีของตกใหม่
 droppedFolder.ChildAdded:Connect(function(item)
-    task.wait(0.5)
+    task.wait(1.5)
     createItemESP(item)
 end)
 
