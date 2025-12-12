@@ -940,111 +940,6 @@ EspTab:Toggle({
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-
--- BoolValue เปิด/ปิด Health Bar
-local ESPHealthEnabled = Instance.new("BoolValue")
-ESPHealthEnabled.Name = "ESPHealthEnabled"
-ESPHealthEnabled.Value = false
-ESPHealthEnabled.Parent = LocalPlayer
-
-local healthBars = {}
-
--- ฟังก์ชันสร้าง Health Bar แนวนอน
-local function CreateHealthBar(plr)
-    if plr == LocalPlayer then return end
-    if not plr.Character or not plr.Character:FindFirstChild("Humanoid") then return end
-    local humanoid = plr.Character.Humanoid
-
-    if plr.Character:FindFirstChild("HealthESP") then
-        plr.Character.HealthESP:Destroy()
-    end
-
-    local bar = Instance.new("BillboardGui")
-    bar.Name = "HealthESP"
-    bar.Adornee = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("Head")
-    bar.Size = UDim2.new(0, 30, 0, 3) -- กว้าง 60 สูง 6 studs
-    bar.StudsOffset = Vector3.new(0, -5, 0) -- วางเหนือหัว
-    bar.AlwaysOnTop = true
-    bar.LightInfluence = 0
-    bar.Parent = plr.Character
-
-    local bg = Instance.new("Frame")
-    bg.Size = UDim2.new(1,0,1,0)
-    bg.Position = UDim2.new(0,0,0,0)
-    bg.BackgroundColor3 = Color3.fromRGB(0,0,0)
-    bg.BorderSizePixel = 0
-    bg.Parent = bar
-
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1,0,1,0)
-    frame.Position = UDim2.new(0,0,0,0)
-    frame.BackgroundColor3 = Color3.fromRGB(144,238,144)
-    frame.BorderSizePixel = 0
-    frame.Parent = bg
-
-    healthBars[plr] = {bar = bar, bg = bg, frame = frame, humanoid = humanoid}
-end
-
--- อัพเดท Health Bar ทุกเฟรม
-RunService.RenderStepped:Connect(function()
-    if not ESPHealthEnabled.Value then
-        for plr, data in pairs(healthBars) do
-            data.bar.Enabled = false
-        end
-        return
-    end
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            if plr.Character and plr.Character:FindFirstChild("Humanoid") then
-                if not healthBars[plr] then
-                    CreateHealthBar(plr)
-                end
-                local data = healthBars[plr]
-                local humanoid = data.humanoid
-                local percent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-                data.frame.Size = UDim2.new(percent,0,1,0)
-                data.frame.Position = UDim2.new(0,0,0,0) -- อยู่ซ้ายไปขวา
-
-                -- สีอ่อนตามเลือด
-                if percent > 0.5 then
-                    data.frame.BackgroundColor3 = Color3.fromRGB(144,238,144) -- เขียวอ่อน
-                elseif percent > 0.25 then
-                    data.frame.BackgroundColor3 = Color3.fromRGB(255,255,102) -- เหลืองอ่อน
-                else
-                    data.frame.BackgroundColor3 = Color3.fromRGB(255,102,102) -- แดงอ่อน
-                end
-                data.bar.Enabled = true
-            end
-        end
-    end
-end)
-
-Players.PlayerAdded:Connect(function(plr)
-    task.wait(0.5)
-    if ESPHealthEnabled.Value then
-        CreateHealthBar(plr)
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(plr)
-    if healthBars[plr] then
-        healthBars[plr].bar:Destroy()
-        healthBars[plr] = nil
-    end
-end)
-
-EspTab:Toggle({
-    Title = "Health",
-    Default = false,
-    Callback = function(state)
-        ESPHealthEnabled.Value = state
-    end
-})
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
@@ -1456,7 +1351,7 @@ if data.highlight then data.highlight:Destroy() end
 end)
 
 droppedFolder.ChildAdded:Connect(function(item)
-    task.wait(1.5)
+    task.wait(0.5)
     createItemESP(item)
 end)
 
