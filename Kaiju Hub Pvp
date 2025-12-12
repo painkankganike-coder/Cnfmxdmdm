@@ -741,7 +741,7 @@ local function createItemESP(item)
 
     -- ชื่อไอเทม (Drawing Text)
     local nameText = Drawing.new("Text")
-    nameText.Size = 16
+    nameText.Size = 10
     nameText.Color = TEXT_COLOR
     nameText.Center = true
     nameText.Outline = true
@@ -845,6 +845,7 @@ droppedFolder.ChildAdded:Connect(function(item)
     createItemESP(item)
 end)
 
+EspTab:Space()
 -- ตัวอย่าง WindUI Toggle
 EspTab:Toggle({
     Title = "Dropped Items",
@@ -858,12 +859,69 @@ EspTab:Toggle({
     end
 })
 
--- อัปเดต CurrentTarget ตาม tracerLine ทุก frame และซิงค์ ESP แบบ realtime
-RunService.RenderStepped:Connect(function()
-    -- ใช้ target ของ tracerLine / Silent Aim
-    local target = GetClosestTarget() -- จากโค้ดล็อคเดิมของคุณ
-    CurrentTarget = target
+-- ตัวแปรเปิด/ปิด ESP Money
+local ESPMoneyEnabledValue = Instance.new("BoolValue")
+ESPMoneyEnabledValue.Name = "ESPMoneyEnabled"
+ESPMoneyEnabledValue.Value = false
+ESPMoneyEnabledValue.Parent = player
+
+-- ฟังก์ชันอัปเดต ESP Money ทั้งหมด
+local function UpdateMoneyESP()
+    for item, data in pairs(ESP_Money) do
+        if ESPMoneyEnabledValue.Value then
+            -- เปิด ESP
+            if data.highlight and data.highlight.Parent == nil then
+                data.highlight.Parent = item
+            end
+            if data.name then
+                data.name.Visible = true
+            end
+        else
+            -- ปิด ESP
+            if data.highlight then
+                data.highlight:Destroy()
+            end
+            if data.name then
+                data.name:Remove()
+            end
+            ESP_Money[item] = nil
+        end
+    end
+end
+
+-- อัปเดตตำแหน่งชื่อทุกเฟรม
+RunService.Heartbeat:Connect(function()
+    if not ESPMoneyEnabledValue.Value then return end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+    for item, data in pairs(ESP_Money) do
+        if item and item.Parent and data.mainPart and data.mainPart.Parent then
+            local worldPos = data.mainPart.Position + Vector3.new(0, 2, 0)
+            local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
+
+            if onScreen then
+                data.name.Position = Vector2.new(screenPos.X, screenPos.Y)
+                data.name.Visible = true
+            else
+                data.name.Visible = false
+            end
+        else
+            if data.highlight then data.highlight:Destroy() end
+            if data.name then data.name:Remove() end
+            ESP_Money[item] = nil
+        end
+    end
 end)
+
+-- WindUI ปุ่มเปิดปิด ESP Money
+EspTab:Toggle({
+    Title = "ESP Money",
+    Value = ESPMoneyEnabledValue.Value,
+    Callback = function(state)
+        ESPMoneyEnabledValue.Value = state
+        UpdateMoneyESP()
+    end
+})
 
 MiscTab:Keybind({
     Title = "Keybind",
