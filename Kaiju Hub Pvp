@@ -375,30 +375,32 @@ CombatTab:Button({
     end
 })
 
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-local camera = workspace.CurrentCamera
+local Camera = workspace.CurrentCamera
 
-local espPlayers = {} -- เก็บ ESP ของแต่ละคน
-local BOX_COLOR = Color3.fromRGB(255,255,255)
-local TARGET_COLOR = Color3.fromRGB(255,0,0)
+-- Config
+local BOX_COLOR = Color3.fromRGB(255, 255, 255)
+local TARGET_COLOR = Color3.fromRGB(255, 0, 0)
 local BOX_THICKNESS = 2
 local SCALE_MULTIPLIER = 1
 
--- ต้องเป็นตัวแปรเดียวกับ Silent Aim
-CurrentTarget = nil
+-- Table เก็บ ESP
+local espPlayers = {}
+_G.ESPEnabled = false
+local CurrentTarget = nil -- ให้เชื่อมกับระบบ Tracer / Silent Aim ของคุณ
 
--- แปลงตำแหน่งโลก → หน้าจอ
+-- แปลงตำแหน่งโลกเป็นหน้าจอ
 local function worldToViewport(pos)
-    local screen, onScreen = camera:WorldToViewportPoint(pos)
+    local screen, onScreen = Camera:WorldToViewportPoint(pos)
     return Vector2.new(screen.X, screen.Y), onScreen
 end
 
--- สร้าง Box ESP สำหรับแต่ละคน
+-- สร้าง Box ESP
 local function createBoxESP(plr)
     if espPlayers[plr] or plr == LocalPlayer then return end
-
     local lines = {}
     for i = 1, 12 do
         local line = Drawing.new("Line")
@@ -410,6 +412,11 @@ local function createBoxESP(plr)
 
     local connection
     connection = RunService.RenderStepped:Connect(function()
+        if not _G.ESPEnabled then
+            for _, line in ipairs(lines) do line.Visible = false end
+            return
+        end
+
         if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
             for _, line in ipairs(lines) do line.Visible = false end
             return
@@ -420,8 +427,8 @@ local function createBoxESP(plr)
         local scale = root.Size.Y * SCALE_MULTIPLIER
 
         local corners = {
-            Vector3.new(-1,  2, -1), Vector3.new( 1,  2, -1), Vector3.new( 1,  2,  1), Vector3.new(-1,  2,  1),
-            Vector3.new(-1, -2, -1), Vector3.new( 1, -2, -1), Vector3.new( 1, -2,  1), Vector3.new(-1, -2,  1)
+            Vector3.new(-1,2,-1),Vector3.new(1,2,-1),Vector3.new(1,2,1),Vector3.new(-1,2,1),
+            Vector3.new(-1,-2,-1),Vector3.new(1,-2,-1),Vector3.new(1,-2,1),Vector3.new(-1,-2,1)
         }
 
         local screenCorners = {}
@@ -438,6 +445,7 @@ local function createBoxESP(plr)
             return
         end
 
+        -- เปลี่ยนสีตามว่าเป็น CurrentTarget หรือไม่
         local color = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
 
         local edges = {
@@ -480,14 +488,14 @@ local function disableAllESP()
     end
 end
 
--- Player Added/Removing
+-- Player Added/Removed
 Players.PlayerAdded:Connect(function(plr)
     task.wait(1)
     if _G.ESPEnabled then createBoxESP(plr) end
 end)
 Players.PlayerRemoving:Connect(removeBoxESP)
 
--- WindUI Toggle
+-- Toggle ปุ่มเดียวกับเดิม
 EspTab:Toggle({
     Title = "Box",
     Icon = "eye",
@@ -501,6 +509,17 @@ EspTab:Toggle({
         end
     end
 })
+
+-- อัปเดตสีทุกเฟรมตาม CurrentTarget (ถ้าอยากให้ Target อัตโนมัติ)
+RunService.RenderStepped:Connect(function()
+    if not _G.ESPEnabled then return end
+    for plr, data in pairs(espPlayers) do
+        local color = (CurrentTarget == plr) and TARGET_COLOR or BOX_COLOR
+        for _, line in ipairs(data.lines) do
+            line.Color = color
+        end
+    end
+end)
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
