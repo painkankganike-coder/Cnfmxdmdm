@@ -700,6 +700,9 @@ EspTab:Toggle({
         end
     end
 })
+
+EspTab:Space()
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -845,7 +848,6 @@ droppedFolder.ChildAdded:Connect(function(item)
     createItemESP(item)
 end)
 
-EspTab:Space()
 -- ตัวอย่าง WindUI Toggle
 EspTab:Toggle({
     Title = "Dropped Items",
