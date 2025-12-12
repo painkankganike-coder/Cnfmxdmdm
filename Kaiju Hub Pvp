@@ -740,40 +740,73 @@ ESPMoneyEnabledValue.Name = "ESPMoneyEnabled"
 ESPMoneyEnabledValue.Value = false
 ESPMoneyEnabledValue.Parent = player
 
--- ฟังก์ชันอัปเดต ESP Money ทั้งหมด
-local function UpdateMoneyESP()
-    for item, data in pairs(ESP_Money) do
-        if ESPMoneyEnabledValue.Value then
-            -- เปิด ESP
-            if data.highlight and data.highlight.Parent == nil then
-                data.highlight.Parent = item
+local ESP_Money = {}  -- เก็บ Highlight + Drawing สำหรับ Money
+
+-- สีเขียว
+local HIGHLIGHT_COLOR = Color3.fromRGB(0, 255, 0)
+local TEXT_COLOR = Color3.fromRGB(0, 255, 0)
+
+-- โฟลเดอร์ของ Money
+local droppedFolder = Workspace:FindFirstChild("DroppedItem") or Workspace:FindFirstChild("DroppedItems")
+if not droppedFolder then
+    warn("ไม่พบโฟลเดอร์ DroppedItem / DroppedItems")
+    return
+end
+
+-- ฟังก์ชันสร้าง ESP สำหรับ Money 1 ชิ้น
+local function createMoneyESP(item)
+    if ESP_Money[item] then return end
+    if item.Name ~= "Money" then return end
+
+    local mainPart = item:FindFirstChild("Handle") or item.PrimaryPart or item:FindFirstChildOfClass("Part")
+    if not mainPart then return end
+
+    if ESPMoneyEnabledValue.Value then
+        -- Highlight
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_HIGHLIGHT"
+        highlight.FillColor = HIGHLIGHT_COLOR
+        highlight.OutlineColor = HIGHLIGHT_COLOR
+        highlight.FillTransparency = 0.3
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Parent = item
+
+        -- ชื่อ
+        local nameText = Drawing.new("Text")
+        nameText.Size = 10
+        nameText.Color = TEXT_COLOR
+        nameText.Center = true
+        nameText.Outline = true
+        nameText.Font = 2
+        nameText.Visible = true
+        nameText.Text = item.Name
+
+        ESP_Money[item] = {
+            highlight = highlight,
+            name = nameText,
+            mainPart = mainPart
+        }
+
+        -- ลบเมื่อ Item หาย
+        item.AncestryChanged:Connect(function()
+            if not item.Parent and ESP_Money[item] then
+                if ESP_Money[item].highlight then ESP_Money[item].highlight:Destroy() end
+                if ESP_Money[item].name then ESP_Money[item].name:Remove() end
+                ESP_Money[item] = nil
             end
-            if data.name then
-                data.name.Visible = true
-            end
-        else
-            -- ปิด ESP
-            if data.highlight then
-                data.highlight:Destroy()
-            end
-            if data.name then
-                data.name:Remove()
-            end
-            ESP_Money[item] = nil
-        end
+        end)
     end
 end
 
--- อัปเดตตำแหน่งชื่อทุกเฟรม
+-- อัปเดตตำแหน่งทุกเฟรม
 RunService.Heartbeat:Connect(function()
     if not ESPMoneyEnabledValue.Value then return end
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
 
     for item, data in pairs(ESP_Money) do
         if item and item.Parent and data.mainPart and data.mainPart.Parent then
             local worldPos = data.mainPart.Position + Vector3.new(0, 2, 0)
-            local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
-
+            local screenPos, onScreen = Workspace.CurrentCamera:WorldToViewportPoint(worldPos)
             if onScreen then
                 data.name.Position = Vector2.new(screenPos.X, screenPos.Y)
                 data.name.Visible = true
@@ -788,13 +821,33 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- สแกน Item เก่า + ใหม่
+for _, item in pairs(droppedFolder:GetChildren()) do createMoneyESP(item) end
+droppedFolder.ChildAdded:Connect(function(item)
+    task.wait(0.5)
+    createMoneyESP(item)
+end)
+
 -- WindUI ปุ่มเปิดปิด ESP Money
 EspTab:Toggle({
     Title = "ESP Money",
     Value = ESPMoneyEnabledValue.Value,
     Callback = function(state)
         ESPMoneyEnabledValue.Value = state
-        UpdateMoneyESP()
+
+        if not state then
+            -- ปิด → ลบทั้งหมด
+            for item, data in pairs(ESP_Money) do
+                if data.highlight then data.highlight:Destroy() end
+                if data.name then data.name:Remove() end
+                ESP_Money[item] = nil
+            end
+        else
+            -- เปิด → สร้างใหม่ทั้งหมด
+            for _, item in pairs(droppedFolder:GetChildren()) do
+                createMoneyESP(item)
+            end
+        end
     end
 })
 
