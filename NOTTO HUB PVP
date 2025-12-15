@@ -25,7 +25,7 @@ Window:Tag({
 })
 
 Window:EditOpenButton({
-    Title = "Notto Hub",
+    Title = "Notto Hub Paid Pvp",
     Icon = "cpu",
     CornerRadius = UDim.new(0,50),
     StrokeThickness = 3,
@@ -1392,11 +1392,15 @@ BodyTab:Toggle({
     Value = false, 
     Callback = function(state) TapEnabled = state; if state then startTap() else stopTap() end end 
 })
+
+BodyTab:Space()
+
 BodyTab:Toggle({ 
     Title = "Infinite Stamina", 
     Value = false, 
     Callback = function(state) SmartStaminaEnabled = state; if state then startSmartStamina() else stopSmartStamina() end end 
 })
+
 BodyTab:Toggle({ 
     Title = "anti kill", 
     Value = false, 
@@ -1408,12 +1412,15 @@ BodyTab:Toggle({
     Callback = function(state) SpinAntiDeathEnabled = state; if state then startSpinAntiDeath() else stopSpinAntiDeath() end end 
 })
 
-ItemTab:Toggle({ 
+BodyTab:Toggle({ 
     Title = "ดูดของ", 
     Desc = "ดูดไอเท็มระยะ 17", 
     Value = false, 
     Callback = function(state) ItemMagnetEnabled = state end 
 })
+
+BodyTab:Space()
+
 ItemTab:Toggle({ 
     Title = "มองของตก", 
     Desc = "ESP + Highlight", 
@@ -1445,6 +1452,9 @@ ItemTab:Toggle({
         end 
     end 
 })
+
+ItemTab:Space()
+
 ItemTab:Toggle({ 
     Title = "ดูของ", 
     Desc = "แสดงอาวุธผู้เล่น", 
@@ -1467,6 +1477,9 @@ BodyTab:Toggle({
     Value = false, 
     Callback = function(state) SinkEnabled = state; if state then EnableSink() else DisableSink() end end 
 })
+
+BodyTab:Space()
+
 BodyTab:Toggle({ 
     Title = "ท่าเต้น", 
     Value = false, 
@@ -1491,6 +1504,8 @@ BodyTab:Toggle({
         end 
     end 
 })
+
+BodyTab:Space()
 
 BodyTab:Toggle({ 
     Title = "ล่องหน", 
