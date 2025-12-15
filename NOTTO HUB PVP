@@ -1,0 +1,1563 @@
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "Notto Hub | Pvp",
+    Icon = "drumstick",
+    Author = "My Notto | BlockSpin | i Gay You :D !",
+    Folder = "XINCOHubFolder",
+    Size = UDim2.fromOffset(400, 350),
+    Theme = "Dark",
+    Transparent = true,
+    Resizable = true,
+})
+
+Window:Tag({
+    Title = "PAID",
+    Icon = "lock-keyhole",
+    Color = Color3.fromHex("#5C5B5B"),
+    Radius = 13,
+})
+
+Window:Tag({
+    Title = "v2.5",
+    Color = Color3.fromHex("#454444"),
+    Radius = 13,
+})
+
+Window:EditOpenButton({
+    Title = "Notto Hub",
+    Icon = "cpu",
+    CornerRadius = UDim.new(0,50),
+    StrokeThickness = 3,
+    Color = ColorSequence.new(
+        Color3.fromHex("2E2E2E"), 
+        Color3.fromHex("000000")
+    ),
+    OnlyMobile = false,
+    Enabled = true,
+    Draggable = true,
+})
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local ContentProvider = game:GetService("ContentProvider")
+local ServerStorage = game:GetService("ServerStorage")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+--// ตัวแปรควบคุม
+local SilentAimEnabled = false
+local SpeedEnabled = false
+local JumpEnabled = false
+local TapEnabled = false
+local SmartStaminaEnabled = false
+local ItemESPEnabled = false
+local ItemMagnetEnabled = false
+local HealthBarEnabled = false
+local ItemViewerEnabled = false
+local SinkEnabled = false
+local DanceEnabled = false
+local AntiAimActive = false
+local InvisEnabled = false
+local DoorBypassEnabled = false
+local UndergroundLockEnabled = false
+local SpinAntiDeathEnabled = false
+local BMXTargetEnabled = false
+
+--// BMX Target Variables
+local bmxIsEnabled = false
+local bmxSelectedPlayer = nil
+local bmxValidParts = {}
+local bmxLastTime = 0
+local bmxCharacter, bmxRootPart
+local bmxGUI = nil
+local kickForce = 16384
+local bounceSpeed = 0.003
+local cooldown = 0.01
+
+--// Gun List
+local GunNames = {"P226","MP5","M24","Draco","Glock","Sawnoff","Uzi","G3","C9","Hunting Rifle","Anaconda","AK47","Remington","Double Barrel"}
+local GunLookup = {}
+for _, name in pairs(GunNames) do GunLookup[name] = true end
+
+--// Drawing
+local fovCircle = Drawing.new("Circle")
+fovCircle.Color = Color3.new(1,1,1)
+fovCircle.Thickness = 2
+fovCircle.NumSides = 100
+fovCircle.Radius = 150
+fovCircle.Filled = false
+fovCircle.Visible = false
+
+local tracerLine = Drawing.new("Line")
+tracerLine.Color = Color3.new(1,0,0)
+tracerLine.Thickness = 2
+tracerLine.Visible = false
+
+--// ESP & Health Bar
+local espObjects = {}
+local healthBars = {}
+local BillboardCache = {}
+local ItemESP_UpdateConnections = {}
+local WeaponDB = {}
+local PreloadedImages = {}
+
+--// Dance
+local currentDanceTrack = nil
+local ANIM_ID = "rbxassetid://104767795538635"
+
+--// RARITY_COLORS
+local RARITY_COLORS = {
+    ["Common"] = Color3.fromRGB(255, 255, 255),
+    ["Uncommon"] = Color3.fromRGB(99, 255, 52),
+    ["Rare"] = Color3.fromRGB(51, 170, 255),
+    ["Epic"] = Color3.fromRGB(237, 44, 255),
+    ["Legendary"] = Color3.fromRGB(255, 150, 0),
+    ["Omega"] = Color3.fromRGB(255, 20, 51),
+}
+
+--// === BMX TARGET TROLL ===
+local function collectBMXParts()
+    bmxValidParts = {}
+    local vehicles = Workspace:FindFirstChild("Vehicles")
+    if not vehicles then return end
+
+    for _, vehicle in vehicles:GetChildren() do
+        if vehicle.Name == "BMX" then
+            local wheels = vehicle:FindFirstChild("Wheels")
+            local colliders = vehicle:FindFirstChild("Colliders")
+            if wheels and colliders then
+                local front = wheels:FindFirstChild("Front")
+                local rear = wheels:FindFirstChild("Rear")
+                local framePart = colliders:FindFirstChild("Part")
+                if front then table.insert(bmxValidParts, front) end
+                if rear then table.insert(bmxValidParts, rear) end
+                if framePart then table.insert(bmxValidParts, framePart) end
+            end
+        end
+    end
+end
+
+local function getBMXTarget()
+    if not bmxSelectedPlayer or not bmxSelectedPlayer.Character then return nil end
+    local char = bmxSelectedPlayer.Character
+    if not char:FindFirstChild("HumanoidRootPart") then return nil end
+    local hrp = char.HumanoidRootPart
+
+    local pos
+    if math.random() < 0.5 then
+        local u = char:FindFirstChild("UpperTorso")
+        local l = char:FindFirstChild("LowerTorso")
+        pos = u and l and (u.Position + l.Position)/2 or hrp.Position
+    else
+        local lf = char:FindFirstChild("LeftFoot") or char:FindFirstChild("Left Foot")
+        local rf = char:FindFirstChild("RightFoot") or char:FindFirstChild("Right Foot")
+        pos = lf and rf and (lf.Position + rf.Position)/2 or hrp.Position - Vector3.new(0, 3, 0)
+    end
+    return {pos = pos, hrp = hrp}
+end
+
+local function bmxAttack(t)
+    if not t or tick() - bmxLastTime < cooldown or #bmxValidParts == 0 then return end
+    bmxLastTime = tick()
+    local core = t.pos
+
+    for _, p in bmxValidParts do
+        if p and p.Parent then
+            p.CFrame = CFrame.new(core + Vector3.new(math.random(-2,2), math.random(-1,1), math.random(-2,2)))
+        end
+    end
+
+    task.spawn(function()
+        for i = 1, 50 do
+            for a = 0, 360, 1 do
+                task.wait(bounceSpeed)
+                local r = 6 + math.sin(i*1.5 + a*0.3)*4
+                local pos = core + Vector3.new(
+                    math.cos(math.rad(a*12+i*20))*r,
+                    math.abs(math.sin(math.rad(a*15)))*3,
+                    math.sin(math.rad(a*14+i*25))*r
+                )
+                local rot = CFrame.Angles(
+                    math.rad(a*40+i*50),
+                    math.rad(a*45),
+                    math.rad(a*35 + math.sin(tick()*100)*200)
+                )
+                for _, p in bmxValidParts do
+                    if p and p.Parent then
+                        p.CFrame = CFrame.new(pos) * rot
+                    end
+                end
+            end
+        end
+    end)
+
+    task.delay(0.3, function()
+        local dir = (t.hrp.Position - bmxRootPart.Position).Unit + Vector3.new(0, 2, 0)
+        local vel = dir * kickForce
+        for _, p in bmxValidParts do
+            if p and p.Parent then
+                p.Velocity = vel + Vector3.new(math.random(-100,100), math.random(150,250), math.random(-100,100))
+            end
+        end
+        pcall(function()
+            local bv = Instance.new("BodyVelocity")
+            bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bv.Velocity = vel * 3
+            bv.Parent = t.hrp
+            Debris:AddItem(bv, 0.5)
+        end)
+    end)
+end
+
+local function createBMXGUI()
+    if bmxGUI then bmxGUI:Destroy() end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "BMXTargetMiniGUI"
+    sg.ResetOnSpawn = false
+    sg.Parent = playerGui
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 260, 0, 130)
+    frame.Position = UDim2.new(1, -280, 0, 15)
+    frame.BackgroundColor3 = Color3.fromRGB(10, 0, 20)
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = sg
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 16)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 50, 200)
+    stroke.Thickness = 3
+    stroke.Parent = frame
+
+    local nameBox = Instance.new("TextBox")
+    nameBox.Size = UDim2.new(0.92, 0, 0, 38)
+    nameBox.Position = UDim2.new(0.04, 0, 0.1, 0)
+    nameBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    nameBox.PlaceholderText = "พิมพ์ชื่อเป้าหมาย..."
+    nameBox.Text = ""
+    nameBox.TextColor3 = Color3.new(1, 1, 1)
+    nameBox.Font = Enum.Font.Gotham
+    nameBox.TextScaled = true
+    nameBox.Parent = frame
+    Instance.new("UICorner", nameBox).CornerRadius = UDim.new(0, 10)
+
+    local dropdown = Instance.new("Frame")
+    dropdown.Size = UDim2.new(0.92, 0, 0, 120)
+    dropdown.Position = UDim2.new(0.04, 0, 0.45, 0)
+    dropdown.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    dropdown.Visible = false
+    dropdown.ClipsDescendants = true
+    dropdown.Parent = frame
+    Instance.new("UICorner", dropdown).CornerRadius = UDim.new(0, 10)
+    local list = Instance.new("UIListLayout")
+    list.Parent = dropdown
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.42, 0, 0, 38)
+    btn.Position = UDim2.new(0.54, 0, 0.1, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+    btn.Text = "OFF"
+    btn.TextScaled = true
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = frame
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+
+    local status = Instance.new("TextLabel")
+    status.Size = UDim2.new(0.96, 0, 0, 28)
+    status.Position = UDim2.new(0.02, 0, 0.7, 0)
+    status.BackgroundTransparency = 1
+    status.Text = "พิมพ์ชื่อก่อน"
+    status.TextColor3 = Color3.fromRGB(200, 200, 200)
+    status.Font = Enum.Font.Gotham
+    status.TextSize = 16
+    status.TextXAlignment = Enum.TextXAlignment.Center
+    status.Parent = frame
+
+    local function updateDropdown()
+        for _, v in dropdown:GetChildren() do
+            if v:IsA("TextButton") then v:Destroy() end
+        end
+        local text = nameBox.Text:lower()
+        if #text < 1 then dropdown.Visible = false; return end
+
+        local matches = {}
+        for _, plr in Players:GetPlayers() do
+            if plr ~= LocalPlayer and plr.Name:lower():find(text, 1, true) then
+                table.insert(matches, plr)
+            end
+        end
+
+        if #matches == 0 then dropdown.Visible = false; return end
+
+        dropdown.Visible = true
+        dropdown.Size = UDim2.new(0.92, 0, 0, math.min(#matches * 35, 120))
+
+        for _, plr in matches do
+            local item = Instance.new("TextButton")
+            item.Size = UDim2.new(1, 0, 0, 35)
+            item.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            item.Text = plr.Name
+            item.TextColor3 = Color3.new(1, 1, 1)
+            item.Font = Enum.Font.Gotham
+            item.TextScaled = true
+            item.Parent = dropdown
+
+            item.MouseButton1Click:Connect(function()
+                nameBox.Text = plr.Name
+                bmxSelectedPlayer = plr
+                dropdown.Visible = false
+                updateBMXUI()
+            end)
+        end
+    end
+
+    local function updateBMXUI()
+        if not bmxSelectedPlayer then
+            btn.Text = "OFF"
+            btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+            status.Text = "พิมพ์ชื่อก่อน"
+            status.TextColor3 = Color3.fromRGB(255, 100, 100)
+        elseif bmxIsEnabled then
+            btn.Text = "ON"
+            btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+            status.Text = "BMX " .. math.floor(#bmxValidParts/3) .. " คัน กำลังชน " .. bmxSelectedPlayer.Name
+            status.TextColor3 = Color3.fromRGB(0, 255, 0)
+        else
+            btn.Text = "OFF"
+            btn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+            status.Text = "BMX " .. math.floor(#bmxValidParts/3) .. " คัน | " .. bmxSelectedPlayer.Name .. " พร้อม"
+            status.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    end
+
+    nameBox:GetPropertyChangedSignal("Text"):Connect(updateDropdown)
+    nameBox.FocusLost:Connect(function() task.wait(0.2); dropdown.Visible = false end)
+
+    btn.MouseButton1Click:Connect(function()
+        if bmxSelectedPlayer then
+            bmxIsEnabled = not bmxIsEnabled
+            updateBMXUI()
+        end
+    end)
+
+    bmxGUI = sg
+    updateBMXUI()
+end
+
+local function startBMXTarget()
+    collectBMXParts()
+    createBMXGUI()
+
+    RunService.Heartbeat:Connect(function()
+        if BMXTargetEnabled and bmxIsEnabled and bmxSelectedPlayer then
+            local t = getBMXTarget()
+            if t then bmxAttack(t) end
+        end
+    end)
+
+    Workspace:WaitForChild("Vehicles").ChildAdded:Connect(function(child)
+        if child.Name == "BMX" then task.wait(1); collectBMXParts() end
+    end)
+    Workspace:WaitForChild("Vehicles").ChildRemoved:Connect(collectBMXParts)
+
+    LocalPlayer.CharacterAdded:Connect(function(c)
+        bmxCharacter = c
+        bmxRootPart = c:WaitForChild("HumanoidRootPart")
+    end)
+
+    bmxCharacter = LocalPlayer.Character
+    bmxRootPart = bmxCharacter and bmxCharacter:FindFirstChild("HumanoidRootPart")
+    print("BMX Target Troll เปิดแล้ว! (แรง 16384)")
+end
+
+local function stopBMXTarget()
+    bmxIsEnabled = false
+    if bmxGUI then bmxGUI:Destroy(); bmxGUI = nil end
+    print("BMX Target Troll ปิดแล้ว!")
+end
+
+--// === SMART INFINITE STAMINA ===
+getgenv().SmartStamina = false
+local SprintModule, SprintBar
+local lastStamina = 1.0
+local isLowStamina = false
+local staminaConnection
+
+local function initSmartStamina()
+    pcall(function()
+        SprintModule = require(ReplicatedStorage.Modules.Game.Sprint)
+        local consume_stamina = SprintModule.consume_stamina
+        SprintBar = debug.getupvalue(consume_stamina, 2).sprint_bar
+    end)
+end
+
+local function smartStaminaFix()
+    if not SprintBar then return end
+    local currentStamina = SprintBar.value or 0
+    if currentStamina < 0.05 and not isLowStamina then
+        isLowStamina = true
+        SprintBar.value = 1.0
+        SprintBar.max_value = 1.0
+        task.spawn(function() task.wait(2); isLowStamina = false end)
+    elseif currentStamina > 0.1 and getgenv().SmartStamina then
+        SprintBar.value = 1.0
+    end
+    lastStamina = currentStamina
+end
+
+local function startSmartStamina()
+    getgenv().SmartStamina = true
+    if SprintModule then
+        local old_consume = SprintModule.consume_stamina
+        SprintModule.consume_stamina = function(...) if getgenv().SmartStamina then return 0 end; return old_consume(...) end
+    end
+    local mt = getrawmetatable(game); setreadonly(mt, false)
+    local old_namecall = mt.__namecall
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if method == "FireServer" and string.find(tostring(self):lower(), "stamina") then return end
+        return old_namecall(self, ...)
+    end)
+    setreadonly(mt, true)
+    if staminaConnection then staminaConnection:Disconnect() end
+    staminaConnection = RunService.Heartbeat:Connect(function()
+        if getgenv().SmartStamina then
+            pcall(smartStaminaFix)
+            local char = LocalPlayer.Character
+            if char then
+                local hum = char:FindFirstChild("Humanoid")
+                if hum and hum.WalkSpeed < 50 then hum.WalkSpeed = 50 end
+            end
+        end
+    end)
+    print("Smart Infinite Stamina เปิดแล้ว! (Speed 50)")
+end
+
+local function stopSmartStamina()
+    getgenv().SmartStamina = false
+    if staminaConnection then staminaConnection:Disconnect(); staminaConnection = nil end
+    print("Smart Infinite Stamina ปิดแล้ว!")
+end
+
+--// === TAP (JumpSpam) ===
+local TapConnection
+local function startTap()
+    if TapConnection then return end
+    TapConnection = RunService.Heartbeat:Connect(function()
+        if TapEnabled and LocalPlayer.Character then
+            local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+            if humanoid then humanoid.Jump = true end
+        end
+    end)
+end
+
+local function stopTap()
+    if TapConnection then TapConnection:Disconnect(); TapConnection = nil end
+end
+
+--// === กันตายใต้ดินถาวร ===
+local UNDERGROUND_DEPTH = 40
+local SURFACE_OFFSET = 3
+local HP_LOW = 15
+local HP_RETURN = 30
+local FLY_SPEED = 120
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+local originalPosition = RootPart.Position
+local isUnderground = false
+local isFlying = false
+local flyConnection
+local lockConnection
+
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "UndergroundLock"
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 240, 0, 80)
+frame.Position = UDim2.new(0, 15, 0, 15)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+frame.BorderSizePixel = 0
+local corner = Instance.new("UICorner", frame)
+corner.CornerRadius = UDim.new(0, 10)
+local label = Instance.new("TextLabel", frame)
+label.Size = UDim2.new(1, 0, 1, 0)
+label.BackgroundTransparency = 1
+label.Text = "สถานะ: รอ..."
+label.TextColor3 = Color3.fromRGB(255, 255, 255)
+label.TextScaled = true
+label.Font = Enum.Font.GothamBold
+
+local function flyTo(targetPos, onArrived)
+    if isFlying then return end
+    isFlying = true
+    local startPos = RootPart.Position
+    local distance = (targetPos - startPos).Magnitude
+    local duration = distance / FLY_SPEED
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(RootPart, tweenInfo, {CFrame = CFrame.new(targetPos)})
+    flyConnection = RunService.Heartbeat:Connect(function()
+        if RootPart and RootPart.Parent then
+            RootPart.Velocity = Vector3.new(0, 0, 0)
+            RootPart.CFrame = CFrame.new(RootPart.Position)
+        end
+    end)
+    tween:Play()
+    tween.Completed:Connect(function()
+        if flyConnection then flyConnection:Disconnect(); flyConnection = nil end
+        isFlying = false
+        if onArrived then onArrived() end
+    end)
+end
+
+local function goUnderground()
+    if isUnderground or isFlying then return end
+    originalPosition = RootPart.Position
+    local undergroundPos = Vector3.new(originalPosition.X, originalPosition.Y - UNDERGROUND_DEPTH, originalPosition.Z)
+    flyTo(undergroundPos, function()
+        isUnderground = true
+        lockConnection = RunService.Heartbeat:Connect(function()
+            if isUnderground and RootPart and RootPart.Parent then
+                RootPart.CFrame = CFrame.new(undergroundPos)
+                RootPart.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+        print("LOCKED: ใต้ดินถาวร (บินลง)!")
+    end)
+end
+
+local function returnToSurface()
+    if not isUnderground or isFlying then return end
+    local surfacePos = Vector3.new(originalPosition.X, originalPosition.Y + SURFACE_OFFSET, originalPosition.Z)
+    flyTo(surfacePos, function()
+        isUnderground = false
+        if lockConnection then lockConnection:Disconnect(); lockConnection = nil end
+        print("บินกลับขึ้นพื้น!")
+    end)
+end
+
+RunService.Heartbeat:Connect(function()
+    if not Character or not Character.Parent or not Humanoid or Humanoid.Health <= 0 or not RootPart then return end
+    local hpPercent = (Humanoid.Health / Humanoid.MaxHealth) * 100
+    if hpPercent <= HP_LOW and not isUnderground and UndergroundLockEnabled then
+        goUnderground()
+    elseif hpPercent >= HP_RETURN and isUnderground then
+        returnToSurface()
+    end
+end)
+
+task.spawn(function()
+    while task.wait(0.5) do
+        if Character and Humanoid then
+            local percent = math.floor((Humanoid.Health / Humanoid.MaxHealth) * 100)
+            local status = isUnderground and "ค้างใต้ดิน" or (isFlying and "กำลังบิน..." or "พื้นปกติ")
+            label.Text = string.format("HP: %d%%\n%s", percent, status)
+            if isUnderground then
+                label.TextColor3 = Color3.fromRGB(255, 80, 80)
+            elseif isFlying then
+                label.TextColor3 = Color3.fromRGB(255, 200, 50)
+            else
+                label.TextColor3 = Color3.fromRGB(100, 255, 100)
+            end
+        end
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    task.wait(1.5)
+    Character = newChar
+    Humanoid = newChar:WaitForChild("Humanoid")
+    RootPart = newChar:WaitForChild("HumanoidRootPart")
+    originalPosition = RootPart.Position
+    isUnderground = false
+    isFlying = false
+    if flyConnection then flyConnection:Disconnect() end
+    if lockConnection then lockConnection:Disconnect() end
+    print("ตัวละครเกิดใหม่ → รีเซ็ตสถานะใต้ดิน")
+end)
+
+--// === กันตาย หมุนหลบ ===
+local MinHP = 25
+local SpinRadius = 12
+local SpinSpeed = 2.0
+local SpinConnection
+
+local function UpdateSpinAntiDeath()
+    local char = LocalPlayer.Character
+    if not char or not SpinAntiDeathEnabled then return end
+    local hum = char:FindFirstChild("Humanoid")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if hum and root and hum.Health <= MinHP and hum.Health > 0 then
+        local t = tick() * SpinSpeed
+        local x = math.cos(t) * SpinRadius
+        local z = math.sin(t) * SpinRadius
+        root.CFrame = CFrame.new(root.Position + Vector3.new(x, 0, z), root.Position)
+    end
+end
+
+local function startSpinAntiDeath()
+    if SpinConnection then return end
+    SpinConnection = RunService.Heartbeat:Connect(UpdateSpinAntiDeath)
+    print("Anti-Death หมุนหลบ เปิดแล้ว! (HP<25)")
+end
+
+local function stopSpinAntiDeath()
+    if SpinConnection then SpinConnection:Disconnect(); SpinConnection = nil end
+    print("Anti-Death หมุนหลบ ปิดแล้ว!")
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if SpinAntiDeathEnabled then startSpinAntiDeath() end
+end)
+
+--// === ITEM VIEWER ===
+local function generateUniqueKey(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local itemId = tool:GetAttribute("ItemId") or tool:GetAttribute("Id")
+    if itemId and itemId ~= "" then return "ITEMID_" .. tostring(itemId) end
+    local partsData = {}
+    for _, part in ipairs(tool:GetDescendants()) do
+        if part:IsA("SpecialMesh") and part.MeshId and part.MeshId ~= "" and part.MeshId ~= "rbxassetid://" then
+            table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureId or "NOTEX"))
+        elseif part:IsA("MeshPart") and part.MeshId and part.MeshId ~= "" then
+            table.insert(partsData, "MESH_"..part.MeshId.."|TEX_"..(part.TextureID or "NOTEX"))
+        elseif part:IsA("Decal") and part.Texture and part.Texture ~= "" then
+            table.insert(partsData, "DECAL_"..part.Texture)
+        elseif part:IsA("Part") then
+            table.insert(partsData, "PART_"..part.Name.."_"..part.Size.X.."x"..part.Size.Y.."x"..part.Size.Z)
+        end
+    end
+    if #partsData > 0 then
+        table.sort(partsData)
+        return "MESHKEY_" .. table.concat(partsData, ";")
+    end
+    local displayName = tool:GetAttribute("DisplayName") or tool.Name
+    local toolName = tool.Name
+    local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Unknown"
+    local imageId = tool:GetAttribute("ImageId") or "NOIMAGE"
+    return "NAME_" .. displayName .. "_" .. toolName .. "_" .. rarity .. "_" .. imageId
+end
+
+local function registerItems(folder)
+    for _, tool in ipairs(folder:GetDescendants()) do
+        if not tool:IsA("Tool") then continue end
+        local key = generateUniqueKey(tool)
+        if not key then continue end
+        local displayName = tool:GetAttribute("DisplayName") or tool.Name
+        local imageId = tool:GetAttribute("ImageId") or "rbxassetid://7072725737"
+        local rarity = tool:GetAttribute("RarityName") or tool:GetAttribute("Rarity") or "Common"
+        WeaponDB[key] = {Name = displayName, Rarity = rarity, ImageId = imageId, ToolName = tool.Name, Key = key}
+        if imageId and imageId ~= "" and not PreloadedImages[imageId] then
+            PreloadedImages[imageId] = true
+            task.spawn(function() pcall(function() ContentProvider:PreloadAsync({imageId}) end) end)
+        end
+    end
+end
+
+pcall(function()
+    local itemsFolder = ReplicatedStorage:WaitForChild("Items", 5)
+    if itemsFolder then registerItems(itemsFolder) end
+    for _, obj in ipairs(ReplicatedStorage:GetChildren()) do
+        if obj:IsA("Folder") and (obj.Name:find("Weapon") or obj.Name:find("Item") or obj.Name:find("Tool")) then
+            registerItems(obj)
+        end
+    end
+    registerItems(game:GetService("StarterPack"))
+end)
+
+task.spawn(function()
+    task.wait(2)
+    for imageId, _ in pairs(PreloadedImages) do
+        if imageId:find("rbxassetid://") then
+            pcall(function() ContentProvider:PreloadAsync({imageId}) end)
+        end
+    end
+end)
+
+local function getWeaponInfo(tool)
+    if not tool or not tool:IsA("Tool") then return nil end
+    local key = generateUniqueKey(tool)
+    return WeaponDB[key]
+end
+
+local function createBillboardForPlayer(player)
+    if player == LocalPlayer or BillboardCache[player] then return end
+    local connections = {}
+    local billboard, container
+    local function updateESP()
+        if not ItemViewerEnabled or not billboard or not billboard.Parent then return end
+        local currentTools = {}
+        local function scan(folder)
+            if not folder then return end
+            for _, tool in ipairs(folder:GetChildren()) do
+                if tool:IsA("Tool") and tool.Name ~= "Fists" then
+                    local info = getWeaponInfo(tool)
+                    if info then table.insert(currentTools, info) end
+                end
+            end
+        end
+        local char = player.Character
+        if char then scan(char) end
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then scan(backpack) end
+        container:ClearAllChildren()
+        local layout = Instance.new("UIGridLayout")
+        layout.CellSize = UDim2.new(0, 35, 0, 35)
+        layout.CellPadding = UDim2.new(0, 6, 0, 0)
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Parent = container
+        for i, info in ipairs(currentTools) do
+            local img = Instance.new("ImageLabel")
+            img.Name = "WeaponIcon_" .. i
+            img.Parent = container
+            img.Size = UDim2.new(0, 35, 0, 35)
+            img.BackgroundTransparency = 1
+            img.Image = info.ImageId or "rbxassetid://7072725737"
+            img.ScaleType = Enum.ScaleType.Fit
+            img.LayoutOrder = i
+            local color = RARITY_COLORS[info.Rarity] or Color3.fromRGB(255, 255, 255)
+            img.ImageColor3 = color:Lerp(Color3.new(1,1,1), 0.35)
+        end
+    end
+    local function setupBillboard()
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        if BillboardCache[player] then pcall(function() BillboardCache[player]:Destroy() end) end
+        for _, conn in pairs(connections) do if conn.Connected then conn:Disconnect() end end
+        connections = {}
+        billboard = Instance.new("BillboardGui")
+        billboard.Name = "ItemViewer"
+        billboard.Adornee = hrp
+        billboard.Size = UDim2.new(0, 280, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, -6.5, 0)
+        billboard.AlwaysOnTop = true
+        billboard.LightInfluence = 0
+        billboard.Enabled = true
+        billboard.Parent = hrp
+        container = Instance.new("Frame")
+        container.Name = "Container"
+        container.Size = UDim2.new(1, 0, 1, 0)
+        container.BackgroundTransparency = 1
+        container.Parent = billboard
+        BillboardCache[player] = billboard
+        updateESP()
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            table.insert(connections, backpack.ChildAdded:Connect(updateESP))
+            table.insert(connections, backpack.ChildRemoved:Connect(updateESP))
+        end
+        table.insert(connections, char.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") then task.defer(updateESP) end
+        end))
+        table.insert(connections, char.ChildRemoved:Connect(function(child)
+            if child:IsA("Tool") then task.defer(updateESP) end
+        end))
+        table.insert(connections, player.ChildAdded:Connect(function(child)
+            if child.Name == "Backpack" then
+                task.wait(0.1)
+                table.insert(connections, child.ChildAdded:Connect(updateESP))
+                table.insert(connections, child.ChildRemoved:Connect(updateESP))
+                updateESP()
+            end
+        end))
+    end
+    if player.Character then task.spawn(setupBillboard) end
+    table.insert(connections, player.CharacterAdded:Connect(function()
+        task.wait(1.5)
+        setupBillboard()
+    end))
+    ItemESP_UpdateConnections[player] = connections
+end
+
+local function removeAllItemViewers()
+    for player, billboard in pairs(BillboardCache) do
+        if billboard and billboard.Parent then pcall(function() billboard:Destroy() end) end
+    end
+    for player, connections in pairs(ItemESP_UpdateConnections) do
+        for _, conn in pairs(connections) do if conn.Connected then conn:Disconnect() end end
+    end
+    BillboardCache = {}
+    ItemESP_UpdateConnections = {}
+end
+
+--// === AIMBOT ===
+local function GetClosestTarget()
+    local closest, shortest = nil, math.huge
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    local myTeam = LocalPlayer.Team
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local character = player.Character
+            if character and character:FindFirstChild("Head") then
+                local humanoid = character:FindFirstChild("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    if not myTeam or player.Team ~= myTeam then
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(character.Head.Position)
+                        if onScreen then
+                            local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                            if dist < 150 and dist < shortest then
+                                shortest = dist
+                                closest = player
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function PredictPosition(headPart)
+    local root = headPart.Parent:FindFirstChild("HumanoidRootPart")
+    if not root then return headPart.Position end
+    local velocity = root.Velocity
+    local prediction = headPart.Position + (velocity * 0.165)
+    local seat = root:FindFirstChildWhichIsA("WeldConstraint") or root:FindFirstChildWhichIsA("Weld")
+    if seat and seat.Part0 then
+        prediction = headPart.Position + (seat.Part0.Velocity * 0.165 * 1.2)
+    end
+    return prediction
+end
+
+local function IsHoldingAllowedGun(args)
+    local ok, weapon = pcall(function() return args[3] end)
+    if ok and typeof(weapon) == "Instance" and GunLookup[weapon.Name] then return true end
+    for _, child in pairs(LocalPlayer.Character:GetChildren()) do
+        if (child:IsA("Tool") or child:IsA("Model")) and GunLookup[child.Name] then return true end
+    end
+    return false
+end
+
+local send = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Send")
+local oldFire
+oldFire = hookfunction(send.FireServer, function(self, ...)
+    local args = {...}
+    if SilentAimEnabled and IsHoldingAllowedGun(args) then
+        local target = GetClosestTarget()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            local head = target.Character.Head
+            local humanoid = target.Character:FindFirstChild("Humanoid")
+            local myTeam = LocalPlayer.Team
+            if humanoid and humanoid.Health > 0 and (not myTeam or target.Team ~= myTeam) then
+                local aimPos = PredictPosition(head)
+                args[4] = CFrame.new(1/0,1/0,1/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0,0/0)
+                args[5] = {[1]={[1]={["Instance"]=head,["Position"]=aimPos}}}
+            end
+        end
+    end
+    return oldFire(self, unpack(args))
+end)
+
+RunService.RenderStepped:Connect(function()
+    if not SilentAimEnabled then
+        fovCircle.Visible = false
+        tracerLine.Visible = false
+        return
+    end
+    fovCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    fovCircle.Radius = 150
+    fovCircle.Visible = true
+    local target = GetClosestTarget()
+    if target and target.Character and target.Character:FindFirstChild("Head") then
+        local predictedPos = PredictPosition(target.Character.Head)
+        local screenPos, onScreen = Camera:WorldToViewportPoint(predictedPos)
+        if onScreen then
+            local ourHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+            if ourHead then
+                local screenStart, _ = Camera:WorldToViewportPoint(ourHead.Position)
+                tracerLine.From = Vector2.new(screenStart.X, screenStart.Y)
+                tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
+                tracerLine.Visible = true
+            end
+        else
+            tracerLine.Visible = false
+        end
+    else
+        tracerLine.Visible = false
+    end
+end)
+
+--// === SPEED + JUMP ===
+local function ApplySpeed()
+    if not LocalPlayer.Character then return end
+    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = 34
+        pcall(function() LocalPlayer:SetAttribute("SpeedMultiplier", 1.400) end)
+    end
+end
+
+local function RemoveSpeed()
+    if not LocalPlayer.Character then return end
+    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = 16
+        pcall(function() LocalPlayer:SetAttribute("SpeedMultiplier", 1) end)
+    end
+end
+
+--// === SINK ===
+local heightOffset = -3
+local sinkConnection
+local function UpdateSink()
+    if not LocalPlayer.Character then return end
+    local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp and SinkEnabled then
+        hrp.CFrame = CFrame.new(hrp.Position.X, hrp.Position.Y + heightOffset, hrp.Position.Z)
+    end
+end
+local function EnableSink()
+    if sinkConnection then return end
+    sinkConnection = RunService.RenderStepped:Connect(UpdateSink)
+end
+local function DisableSink()
+    if sinkConnection then sinkConnection:Disconnect(); sinkConnection = nil end
+end
+
+--// === DANCE ===
+local function PlayDance()
+    if not LocalPlayer.Character then return end
+    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    if currentDanceTrack then currentDanceTrack:Stop(); currentDanceTrack:Destroy() end
+    local anim = Instance.new("Animation")
+    anim.AnimationId = ANIM_ID
+    currentDanceTrack = humanoid:LoadAnimation(anim)
+    currentDanceTrack.Looped = true
+    currentDanceTrack:Play()
+end
+local function StopDance()
+    if currentDanceTrack then currentDanceTrack:Stop(); currentDanceTrack:Destroy(); currentDanceTrack = nil end
+end
+
+--// === ITEM ESP ===
+local function getRealItemName(item)
+    for _, child in pairs(item:GetChildren()) do
+        if child:IsA("StringValue") and (child.Name:find("Name") or child.Name:find("display")) then
+            return child.Value
+        end
+    end
+    local attrName = item:GetAttribute("DisplayName") or item:GetAttribute("Name") or item.Name
+    if attrName ~= "" then return attrName end
+    return item.Name
+end
+
+local function createESP(part)
+    if espObjects[part] or not ItemESPEnabled then return end
+    local realName = getRealItemName(part.Parent or part)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ItemESP"
+    billboard.Parent = part
+    billboard.Size = UDim2.new(0, 75, 0, 38)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 0
+    billboard.Adornee = part
+    local text = Instance.new("TextLabel")
+    text.Parent = billboard
+    text.Size = UDim2.new(1, 0, 1, 0)
+    text.BackgroundTransparency = 1
+    text.Text = realName
+    text.TextColor3 = Color3.fromRGB(0, 255, 100)
+    text.TextStrokeTransparency = 0
+    text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    text.TextScaled = true
+    text.Font = Enum.Font.GothamBold
+    local highlight = Instance.new("Highlight")
+    highlight.Parent = part
+    highlight.FillColor = Color3.fromRGB(0, 255, 100)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.7
+    highlight.OutlineTransparency = 0.3
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    espObjects[part] = {billboard, highlight}
+end
+
+local function removeESP(part)
+    if espObjects[part] then for _, obj in pairs(espObjects[part]) do obj:Destroy() end; espObjects[part] = nil end
+end
+
+local function scanAllItems()
+    local droppedFolder = Workspace:FindFirstChild("DroppedItems")
+    if droppedFolder then
+        for _, item in pairs(droppedFolder:GetChildren()) do
+            local handle = item:FindFirstChild("Handle") or item
+            if handle and handle:IsA("BasePart") then createESP(handle) end
+        end
+    end
+end
+
+local function initESP()
+    local folder = Workspace:FindFirstChild("DroppedItems")
+    if folder then
+        folder.ChildAdded:Connect(function(child)
+            task.wait(0.1)
+            local handle = child:FindFirstChild("Handle") or child
+            if handle and handle:IsA("BasePart") then createESP(handle) end
+        end)
+        folder.ChildRemoved:Connect(function(child)
+            local handle = child:FindFirstChild("Handle") or child
+            removeESP(handle)
+        end)
+        scanAllItems()
+    else
+        Workspace.ChildAdded:Connect(function(child)
+            if child.Name == "DroppedItems" then task.wait(1); initESP() end
+        end)
+    end
+end
+
+--// === ITEM MAGNET ===
+local DETECTION_RANGE = 17
+local MAGNET_SPEED = 20
+local PICKUP_ZONE_SIZE = 17
+
+local function adjustPickUpZone(instance)
+    local pickUpZone = instance:FindFirstChild("PickUpZone")
+    if pickUpZone and pickUpZone:IsA("BasePart") then
+        pickUpZone.Size = Vector3.new(PICKUP_ZONE_SIZE, PICKUP_ZONE_SIZE, PICKUP_ZONE_SIZE)
+        pickUpZone.CanCollide = false
+        pickUpZone.Transparency = 1
+    end
+end
+
+local function handleItem(item)
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local targetPos = character.HumanoidRootPart.Position
+    local currentPos = item:GetPivot().Position
+    local distance = (targetPos - currentPos).Magnitude
+    if distance <= DETECTION_RANGE then
+        local direction = (targetPos - currentPos).Unit * MAGNET_SPEED * 0.1
+        item:PivotTo(item:GetPivot() + direction)
+        local remote = ReplicatedStorage:FindFirstChild("pickup_dropped_item")
+        if remote then remote:FireServer(item) end
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if not ItemMagnetEnabled then return end
+    for _, item in pairs(Workspace:GetChildren()) do
+        if item:FindFirstChild("PickUpZone") then
+            adjustPickUpZone(item)
+            handleItem(item)
+        end
+    end
+end)
+
+Workspace.DescendantAdded:Connect(function(instance)
+    if instance.Name == "PickUpZone" then adjustPickUpZone(instance.Parent) end
+end)
+
+--// === HEALTH BAR ===
+local function createHealthBar(character, player)
+    if not HealthBarEnabled then return end
+    if healthBars[character] then return end
+    local head = character:FindFirstChild("Head")
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not head or not humanoid then return end
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "HealthBar"
+    billboard.Size = UDim2.new(0, 80, 0, 20)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = head
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0.6, 0)
+    nameLabel.Position = UDim2.new(0, 0, -0.9, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = player.DisplayName or player.Name
+    nameLabel.TextScaled = true
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.TextColor3 = Color3.new(1, 1, 1)
+    nameLabel.Parent = billboard
+    local background = Instance.new("Frame")
+    background.Size = UDim2.new(1, 0, 0.3, 0)
+    background.Position = UDim2.new(0, 0, 0.7, 0)
+    background.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    background.BorderSizePixel = 0
+    background.Parent = billboard
+    local healthBar = Instance.new("Frame")
+    healthBar.Size = UDim2.new(1, 0, 1, 0)
+    healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    healthBar.BorderSizePixel = 0
+    healthBar.Parent = background
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if humanoid and humanoid.Health > 0 then
+            local health = humanoid.Health
+            local maxHealth = humanoid.MaxHealth
+            local percent = math.clamp(health / maxHealth, 0, 1)
+            healthBar.Size = UDim2.new(percent, 0, 1, 0)
+            healthBar.BackgroundColor3 = Color3.fromRGB(255 * (1 - percent), 255 * percent, 0)
+        else
+            if billboard then billboard:Destroy() end
+            if connection then connection:Disconnect() end
+            healthBars[character] = nil
+        end
+    end)
+    healthBars[character] = {billboard, connection}
+end
+
+local function removeAllHealthBars()
+    for character, data in pairs(healthBars) do
+        for _, obj in pairs(data) do
+            if typeof(obj) == "Instance" then obj:Destroy() end
+            if typeof(obj) == "RBXScriptConnection" then obj:Disconnect() end
+        end
+    end
+    healthBars = {}
+end
+
+local function setupPlayerHealth(player)
+    if player == LocalPlayer then return end
+    player.CharacterAdded:Connect(function(char) task.wait(1); createHealthBar(char, player) end)
+    if player.Character then createHealthBar(player.Character, player) end
+end
+
+--// === ULTIMATE ANTI-AIM ===
+local AntiAimUI, StatusLabel
+local AntiAimConnections = {}
+local AntiAimCharacter, AntiAimHumanoid, AntiAimRootPart
+local SpinAngle = 0
+
+local function SetupAntiAimCharacter()
+    AntiAimCharacter = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    AntiAimHumanoid = AntiAimCharacter:WaitForChild("Humanoid")
+    AntiAimRootPart = AntiAimCharacter:WaitForChild("HumanoidRootPart")
+end
+
+local function CreateAntiAimUI()
+    AntiAimUI = Instance.new("ScreenGui")
+    AntiAimUI.Name = "AntiAimUI"
+    AntiAimUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(0, 320, 0, 65)
+    Frame.Position = UDim2.new(0, 20, 0, 20)
+    Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    Frame.BorderSizePixel = 0
+    Frame.Parent = AntiAimUI
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 14)
+    Corner.Parent = Frame
+    local Stroke = Instance.new("UIStroke")
+    Stroke.Color = Color3.fromRGB(0, 255, 0)
+    Stroke.Thickness = 3
+    Stroke.Parent = Frame
+    StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Size = UDim2.new(1, 0, 1, 0)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = "ULTIMATE ANTI-AIM: OFF"
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    StatusLabel.Font = Enum.Font.GothamBold
+    StatusLabel.TextSize = 17
+    StatusLabel.TextStrokeTransparency = 0
+    StatusLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    StatusLabel.Parent = Frame
+end
+
+local function StartAntiAim()
+    if not AntiAimActive then return end
+    SetupAntiAimCharacter()
+    AntiAimConnections.Spin = RunService.Heartbeat:Connect(function()
+        if not AntiAimActive or not AntiAimRootPart or not AntiAimRootPart.Parent then return end
+        SpinAngle = SpinAngle + 3.2
+        local SpinCFrame = CFrame.Angles(
+            math.rad(math.sin(SpinAngle * 0.9) * 50),
+            math.rad(SpinAngle),
+            math.rad(math.cos(SpinAngle * 1.1) * 40)
+        )
+        AntiAimRootPart.CFrame = AntiAimRootPart.CFrame * SpinCFrame
+        local Offset = Vector3.new(
+            math.sin(SpinAngle * 0.6) * 10,
+            math.sin(SpinAngle * 0.4) * 6,
+            math.cos(SpinAngle * 0.8) * 10
+        )
+        AntiAimRootPart.CFrame = AntiAimRootPart.CFrame + AntiAimRootPart.CFrame:VectorToWorldSpace(Offset)
+        AntiAimRootPart.Velocity = Vector3.new(math.random(-45, 45), AntiAimRootPart.Velocity.Y, math.random(-45, 45))
+    end)
+    AntiAimConnections.Sink = RunService.RenderStepped:Connect(function()
+        if not AntiAimActive or not AntiAimRootPart or not AntiAimRootPart.Parent then return end
+        if AntiAimRootPart.Position.Y > -18 then
+            AntiAimRootPart.Velocity = AntiAimRootPart.Velocity + Vector3.new(0, -60, 0)
+        end
+        if math.random() < 0.1 then
+            AntiAimRootPart.Velocity = AntiAimRootPart.Velocity + Vector3.new(0, 55, 0)
+        end
+    end)
+    AntiAimConnections.Hitbox = RunService.Stepped:Connect(function()
+        if not AntiAimActive or not AntiAimCharacter then return end
+        pcall(function()
+            AntiAimRootPart.Size = Vector3.new(4.5, 4.5, 2)
+            AntiAimRootPart.Transparency = 0.9
+            for _, Part in pairs(AntiAimCharacter:GetChildren()) do
+                if Part:IsA("BasePart") and Part ~= AntiAimRootPart then
+                    Part.Transparency = 0.98
+                    Part.Size = Vector3.new(0.05, 0.05, 0.05)
+                    Part.CanCollide = false
+                end
+            end
+        end)
+    end)
+end
+
+local function StopAntiAim()
+    AntiAimActive = false
+    if StatusLabel then
+        StatusLabel.Text = "ULTIMATE ANTI-AIM: OFF"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+    for _, Conn in pairs(AntiAimConnections) do if Conn then Conn:Disconnect() end end
+    AntiAimConnections = {}
+    if AntiAimCharacter then
+        pcall(function()
+            AntiAimRootPart.Size = Vector3.new(2, 2, 1)
+            AntiAimRootPart.Transparency = 0
+            for _, Part in pairs(AntiAimCharacter:GetChildren()) do
+                if Part:IsA("BasePart") and Part ~= AntiAimRootPart then
+                    Part.Transparency = 0
+                    Part.CanCollide = true
+                end
+            end
+        end)
+    end
+end
+
+--// === ล่องหน ===
+local InvisChair = nil
+local function setTransparency(char, val)
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+            p.Transparency = val
+        end
+    end
+end
+
+local function toggleInvis()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    InvisEnabled = not InvisEnabled
+    if InvisEnabled then
+        local savedCFrame = char.HumanoidRootPart.CFrame
+        setTransparency(char, 0.5)
+        task.wait()
+        char:MoveTo(Vector3.new(-25.95, 84, 3537.55))
+        task.wait(0.15)
+        if InvisChair then InvisChair:Destroy() end
+        InvisChair = Instance.new("Seat", workspace)
+        InvisChair.Name = "invischair"
+        InvisChair.Anchored = false
+        InvisChair.CanCollide = false
+        InvisChair.Transparency = 1
+        InvisChair.Position = Vector3.new(-25.95, 84, 3537.55)
+        local weld = Instance.new("Weld", InvisChair)
+        weld.Part0 = InvisChair
+        weld.Part1 = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+        InvisChair.CFrame = savedCFrame
+        print("ล่องหน: เปิด")
+    else
+        setTransparency(char, 0)
+        if InvisChair then InvisChair:Destroy(); InvisChair = nil end
+        print("ล่องหน: ปิด")
+    end
+end
+
+--// === ลบ DoorSystem + เปิดประตู ===
+local function destroyDoorSystem(obj)
+    if obj.Name == "DoorSystem" then
+        pcall(function()
+            obj:Destroy()
+            print("ลบ DoorSystem:", obj:GetFullName())
+        end)
+        return true
+    end
+    return false
+end
+
+local function bypassAllDoors()
+    local count = 0
+    for _, obj in pairs({Workspace, ReplicatedStorage, ServerStorage, Lighting}) do
+        pcall(function()
+            for _, v in pairs(obj:GetDescendants()) do
+                if destroyDoorSystem(v) then count = count + 1 end
+            end
+        end)
+    end
+    for _, part in pairs(Workspace:GetDescendants()) do
+        if part:IsA("BasePart") and (part.Name:find("Door") or part.Name:find("ประตู")) then
+            pcall(function()
+                part.CanCollide = false
+                part.Transparency = 1
+                if part:FindFirstChild("ProximityPrompt") then part.ProximityPrompt:Destroy() end
+                if part:FindFirstChild("ClickDetector") then part.ClickDetector:Destroy() end
+                count = count + 1
+            end)
+        end
+    end
+    print("ลบ DoorSystem + เปิดประตูทั้งหมด:", count, "ชิ้น")
+end
+
+Workspace.DescendantAdded:Connect(function(obj)
+    task.wait(0.1)
+    if obj.Name == "DoorSystem" then
+        pcall(obj.Destroy, obj)
+        print("ลบ DoorSystem ใหม่:", obj:GetFullName())
+    end
+end)
+
+--// === RESPAWN HANDLER ===
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    task.wait(1)
+    local humanoid = newChar:WaitForChild("Humanoid", 5)
+    local hrp = newChar:WaitForChild("HumanoidRootPart", 5)
+    if not humanoid or not hrp then return end
+    if SpeedEnabled then ApplySpeed() end
+    if JumpEnabled then humanoid.JumpPower = 23; humanoid.JumpHeight = 23 end
+    if SmartStaminaEnabled then startSmartStamina() end
+    if SinkEnabled then EnableSink() end
+    if DanceEnabled then PlayDance() end
+    if AntiAimActive then task.wait(1.5); SetupAntiAimCharacter(); StartAntiAim() end
+    if UndergroundLockEnabled then isUnderground = false; isFlying = false; if flyConnection then flyConnection:Disconnect() end; if lockConnection then lockConnection:Disconnect() end end
+    if SpinAntiDeathEnabled then startSpinAntiDeath() end
+    if BMXTargetEnabled then
+        task.wait(1)
+        bmxCharacter = newChar
+        bmxRootPart = newChar:WaitForChild("HumanoidRootPart")
+    end
+end)
+
+--// === INIT ===
+task.spawn(initESP)
+initSmartStamina()
+CreateAntiAimUI()
+SetupAntiAimCharacter()
+for _, player in ipairs(Players:GetPlayers()) do
+    setupPlayerHealth(player)
+    if player ~= LocalPlayer then createBillboardForPlayer(player) end
+end
+Players.PlayerAdded:Connect(function(p) if p ~= LocalPlayer then createBillboardForPlayer(p) end end)
+Players.PlayerRemoving:Connect(function(p)
+    if BillboardCache[p] then pcall(function() BillboardCache[p]:Destroy() end); BillboardCache[p] = nil end
+    if ItemESP_UpdateConnections[p] then
+        for _, conn in pairs(ItemESP_UpdateConnections[p]) do if conn.Connected then conn:Disconnect() end end
+        ItemESP_UpdateConnections[p] = nil
+    end
+end)
+
+local AimbotTab = Window:Tab({ Title = "COMBAT:", Icon = "crosshair" })
+local BodyTab = Window:Tab({ Title = "CHEATER:", Icon = "user" })
+local ItemTab = Window:Tab({ Title = "ESP:", Icon = "eye" })
+local VisualTab = Window:Tab({ Title = "TROLL:", Icon = "bug-play" })
+local ServerTab = Window:Tab({Title = "Server", Icon = "server"})
+
+AimbotTab:Toggle({ 
+    Title = "Silent Aim", 
+    Value = false, 
+    Callback = function(state) SilentAimEnabled = state end 
+})
+
+BodyTab:Toggle({ 
+    Title = "Speed", 
+    Value = false, 
+    Callback = function(state) SpeedEnabled = state; if state then ApplySpeed() else RemoveSpeed() end end 
+})
+BodyTab:Toggle({ 
+    Title = "Jump", 
+    Value = false, 
+    Callback = function(state) 
+        JumpEnabled = state 
+        local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") 
+        if h then h.JumpPower = state and 23 or 50; h.JumpHeight = state and 23 or 7.2 end 
+    end 
+})
+BodyTab:Toggle({ 
+    Title = "JumpSpam",
+    Value = false, 
+    Callback = function(state) TapEnabled = state; if state then startTap() else stopTap() end end 
+})
+BodyTab:Toggle({ 
+    Title = "Infinite Stamina", 
+    Value = false, 
+    Callback = function(state) SmartStaminaEnabled = state; if state then startSmartStamina() else stopSmartStamina() end end 
+})
+BodyTab:Toggle({ 
+    Title = "anti kill", 
+    Value = false, 
+    Callback = function(state) UndergroundLockEnabled = state end 
+})
+BodyTab:Toggle({ 
+    Title = "anti kill v2",
+    Value = false, 
+    Callback = function(state) SpinAntiDeathEnabled = state; if state then startSpinAntiDeath() else stopSpinAntiDeath() end end 
+})
+
+ItemTab:Toggle({ 
+    Title = "ดูดของ", 
+    Desc = "ดูดไอเท็มระยะ 17", 
+    Value = false, 
+    Callback = function(state) ItemMagnetEnabled = state end 
+})
+ItemTab:Toggle({ 
+    Title = "มองของตก", 
+    Desc = "ESP + Highlight", 
+    Value = false, 
+    Callback = function(state) 
+        ItemESPEnabled = state 
+        if state then scanAllItems() 
+        else 
+            for part, objs in pairs(espObjects) do 
+                for _, obj in pairs(objs) do obj:Destroy() end 
+            end 
+            espObjects = {} 
+        end 
+    end 
+})
+
+ItemTab:Toggle({ 
+    Title = "ดูเลือด", 
+    Desc = "Health Bar + ชื่อ",  
+    Value = false, 
+    Callback = function(state) 
+        HealthBarEnabled = state 
+        if state then 
+            for _, p in ipairs(Players:GetPlayers()) do 
+                if p ~= LocalPlayer and p.Character then createHealthBar(p.Character, p) end 
+            end 
+        else 
+            removeAllHealthBars() 
+        end 
+    end 
+})
+ItemTab:Toggle({ 
+    Title = "ดูของ", 
+    Desc = "แสดงอาวุธผู้เล่น", 
+    Value = false, 
+    Callback = function(state) 
+        ItemViewerEnabled = state 
+        if state then 
+            for _, p in ipairs(Players:GetPlayers()) do 
+                if p ~= LocalPlayer then createBillboardForPlayer(p) end 
+            end 
+        else 
+            removeAllItemViewers() 
+        end 
+    end 
+})
+
+BodyTab:Toggle({ 
+    Title = "มุดเก็บของ", 
+    Desc = "จมลงใต้พื้น", 
+    Value = false, 
+    Callback = function(state) SinkEnabled = state; if state then EnableSink() else DisableSink() end end 
+})
+BodyTab:Toggle({ 
+    Title = "ท่าเต้น", 
+    Value = false, 
+    Callback = function(state) DanceEnabled = state; if state then PlayDance() else StopDance() end end 
+})
+
+BodyTab:Toggle({ 
+    Title = "ANTI-AIM", 
+    Value = false, 
+    Callback = function(state) 
+        AntiAimActive = state 
+        if state then 
+            StartAntiAim() 
+            if StatusLabel then 
+                StatusLabel.Text = "ULTIMATE ANTI-AIM: ACTIVE\nยิงไม่ออก/ไม่โดน 100%" 
+                StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0) 
+            end 
+            print("ULTIMATE ANTI-AIM เปิดแล้ว!") 
+        else 
+            StopAntiAim() 
+            print("ULTIMATE ANTI-AIM ปิด") 
+        end 
+    end 
+})
+
+BodyTab:Toggle({ 
+    Title = "ล่องหน", 
+    Desc = "ใช้เก้าอี้ + ย้ายจุดลับ", 
+    Value = false, 
+    Callback = function(state) 
+        if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait(); task.wait(1) end 
+        if state and not InvisEnabled then toggleInvis() 
+        elseif not state and InvisEnabled then toggleInvis() 
+        end 
+    end 
+})
+
+ServerTab:Toggle({ 
+    Title = "ลบ Door",  
+    Icon = "door-open", 
+    Value = false, 
+    Callback = function(state) 
+        DoorBypassEnabled = state 
+        if state then 
+            bypassAllDoors() 
+            print("เริ่มลบ DoorSystem และเฝ้าดูใหม่...") 
+        else 
+            print("หยุดเฝ้าดู DoorSystem") 
+        end 
+    end 
+})
+
+VisualTab:Toggle({ 
+    Title = "troll Player", 
+    Value = false, 
+    Callback = function(state) 
+        BMXTargetEnabled = state
+        if state then 
+            startBMXTarget() 
+        else 
+            stopBMXTarget() 
+        end 
+    end 
+})
+
+task.spawn(function()
+    task.wait(0.1) -- รอให้ GUI สร้างก่อน
+    
+    -- ลบ GUI HP (UndergroundLock)
+    local coreGui = game:GetService("CoreGui")
+    local hpGui = coreGui:FindFirstChild("UndergroundLock")
+    if hpGui then
+        hpGui:Destroy()
+        print("✅ ลบ GUI HP ออกแล้ว!")
+    end
+    
+    -- ลบ GUI Anti-Aim
+    local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+    local antiAimGui = playerGui:FindFirstChild("AntiAimUI")
+    if antiAimGui then
+        antiAimGui:Destroy()
+        print("✅ ลบ GUI Anti-Aim ออกแล้ว!")
+    end
+    
+    -- ลบซ้ำเผื่อมีใหม่ (loop)
+    spawn(function()
+        while task.wait(2) do
+            pcall(function()
+                if coreGui:FindFirstChild("UndergroundLock") then coreGui:FindFirstChild("UndergroundLock"):Destroy() end
+                if playerGui:FindFirstChild("AntiAimUI") then playerGui:FindFirstChild("AntiAimUI"):Destroy() end
+            end)
+        end
+    end)
+end)
